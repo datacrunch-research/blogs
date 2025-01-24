@@ -28,7 +28,7 @@ To orchestrate the distributed communications over GPUs, PrimeIntellect introduc
 
 The baseline for the experimentation is the same configuration as DiLoCo original work except for using a LLama model instead of Chinchilla.
 
-OpenDiLoCo’s main results on a 150m llama model (Figure 1 and Table 1) show that DiLoCo with 8 model replicas outperforms the baseline with no replicas and matches; with x500 less communication, the same baseline with x8 batch size using Data Parallelism (DP).
+OpenDiLoCo’s main results on a 150m llama model (fig 1 and Table 1) show that DiLoCo with 8 model replicas outperforms the baseline with no replicas and matches; with x500 less communication, the same baseline with x8 batch size using Data Parallelism (DP).
 
 <figure>
     <img src="images/opendiloco_llama_150m_result.png" alt="Figure 1: OpenDiLoCo’s main result. 150m llama model.">
@@ -58,7 +58,7 @@ PrimeIntellect’s PRIME framework extends OpenDiloco for robust distributed tra
 
 ## Results: Distributed training
 
-A public training of a **10B**, LLama 3-based architecture, model across 8 datacenters between 3 continents was performed, with $h= 100$ local steps. Being the first successful training of a model of this scale across such geographically distributed compute resources with limited network bandwidth.
+A public training of a **10B**, LLama 3-based architecture, model across 8 datacenters between 3 continents (fig 2) was performed, with $h= 100$ local steps. Being the first successful training of a model of this scale across such geographically distributed compute resources with limited network bandwidth.
 
 <figure>
     <img src="images/intellect_1_global_training.png" alt="Figure 2: Locations of the nodes by all 30 compute contributors for INTELLECT-1. The lines between nodes illustrate the Ring-All-Reduce topology, spanning the whole globe from the US to Europe, Asia, and back to the US.">
@@ -85,18 +85,18 @@ Table 2 shows that although MFU decreases and All-reduce communication time quic
 
 The all-reduce communication time increases with the geographical distance: the median is 103 seconds within the USA, 382 seconds for transatlantic communication, and 469 seconds in the global setting.
 
-Figure 3 in blue: distribution for all-reduce completion time in USA. Showing a consistent time centered around 100 seconds. Tight distribution with minimal variance, compacted in a range from 80s to 180s.
+Time distribution for All-Reduce over USA (fig 3) shows a consistent time centered around 100 seconds. Tight distribution with minimal variance, compacted in a range from 80s to 180s.
 <figure>
     <img src="images/distribution_all_reduce_usa_time.png" alt="Distribution of All Reduce Time (USA)">
     <figcaption style="text-align: center;">Figure 3: Distribution of All Reduce Time (USA)</figcaption>
 </figure>
 
-Figure 4 in green: USA + Europe, with an increased time around the mean of 380 seconds. Shows a significantly greater time than USA only. A wider range of 300s to 600s with some outlines.
+As expected when performing the outer optimiser All-Reduce including Europe (fig 4), time increases up to around the mean of 380 seconds. Shows a significantly greater time than USA only. A wider range of 300s to 600s with some outlines.
 <figure>
     <img src="images/distribution_all_reduce_usa_eu_time.png" alt="Distribution of All Reduce Time (USA+Europe)">
     <figcaption style="text-align: center;">Figure 4: Distribution of All Reduce Time (USA+Europe)</figcaption>
 </figure>
-Figure 5 in red: Worldwide, showing high density around the 25th percentile, heavy right tail pointing to a greater number of outlines. The widest range from 350 to 1400s.
+Worldwide synchronization (fig 5) further increase becoming a significant overhead to the overall training time, showing high density around the 25th percentile, heavy right tail pointing to a greater number of outlines. The widest range from 350 to 1400s.
 
 <figure>
     <img src="images/distribution_all_reduce_world_time.png" alt="Distribution of All Reduce Time (world)">
@@ -105,7 +105,7 @@ Figure 5 in red: Worldwide, showing high density around the 25th percentile, hea
 
 These experiments revealed network instabilities across geographical distributions: Fluctuations in available bandwidth ranging from 500 Mb/s to 4 Gb/s, with latency spikes in intercontinental links and node dropouts due to transient network failures.
 
-Figure 6 illustrates the capabilities of PRIME to handle dynamic node participation while maintaining training stability. Scaling from 4 to 14 nodes and enabling asymmetrical addition of new nodes and removal of failure or departed ones.
+PRIME capabilities to handle dynamic node participation while maintaining training stability (fig 6). Scaling from 4 to 14 nodes and enabling asymmetrical addition of new nodes and removal of failure or departed ones.
 
 <figure>
     <img src="images/number_active_training_nodes_over_training_steps.png" alt="Figure 6: Number of active training nodes over training steps.">
