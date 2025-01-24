@@ -65,6 +65,8 @@ A public training of a **10B**, LLama 3-based architecture, model across 8 datac
     <img src="images/intellect_1_global_training.png" alt="Figure 2: Locations of the nodes by all 30 compute contributors for INTELLECT-1. The lines between nodes illustrate the Ring-All-Reduce topology, spanning the whole globe from the US to Europe, Asia, and back to the US.">
     <figcaption style="text-align: center;">Figure 2: Locations of the nodes by all 30 compute contributors for INTELLECT-1. The lines between nodes illustrate the Ring-All-Reduce topology, spanning the whole globe from the US to Europe, Asia, and back to the US.</figcaption>
 </figure>
+
+
 ### Compute efficiency analysis
 
 By quantizing the pseudo-gradients to int8, communication requirements were reduced by a factor of 400x. **2 minutes** were required to **synchronize** the **outer** **optimizer** across the US and 10 for global synchronization thus resulting in **2-10% of the total training time** allocated to intra-node communication.
