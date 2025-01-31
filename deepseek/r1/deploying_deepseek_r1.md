@@ -1,23 +1,23 @@
-# Deploying DeepSeek-R1 671B on 8xH200 Datacrunch
+# Deploy DeepSeek-R1 671B on 8x NVIDIA H200 with DataCrunch
 
 ## Inference engine: SGLang
-SGLang is the recommended inference engine for deploying Deepseek models, in particular Deepseek [V3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/DeepSeek_V3.pdf)/[R1](https://github.com/deepseek-ai/DeepSeek-R1/blob/main/DeepSeek_R1.pdf), currently supporting MLA optimizations, DP Attention, FP8 (W8A8), FP8 KV Cache, and Torch Compile, delivering state-of-the-art latency and throughput performance among open-source frameworks.
+SGLang is the recommended inference engine for deploying DeepSeek models, in particular [DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/DeepSeek_V3.pdf) and [Deep-Seek-R1](https://github.com/deepseek-ai/DeepSeek-R1/blob/main/DeepSeek_R1.pdf). SGLang currently supports MLA optimizations, DP Attention, FP8 (W8A8), FP8 KV Cache, and Torch Compile, enabling it to deliver state-of-the-art latency and throughput performance among other open-source frameworks.
 
 Notably, SGLang v0.4.1 fully supports running DeepSeek-V3 on both NVIDIA and AMD GPUs, making it a highly versatile and robust solution. SGLang also supports multi-node tensor parallelism, enabling you to run this model on multiple network-connected machines.
 
 Multi-Token Prediction (MTP) is in development, and progress can be tracked in the [optimization plan](https://github.com/sgl-project/sglang/issues/2591) (e.g. [FusedMoE H200 aware-tuning](https://github.com/sgl-project/sglang/issues/2471#event-15791112196)) and [custom kernels development](https://github.com/sgl-project/sglang/issues/2965).
 
-We have been providing SGLang team GPU infrastructure targeting H200 aware-tunning for optimal performance. (see [H200 DeepSeek V3/R1 benchmarking](https://github.com/sgl-project/sglang/issues/2450)).
+We have been providing the SGLang team with GPU infrastructure targeting H200 aware-tunning for optimal performance. (see [H200 DeepSeek V3/R1 benchmarking](https://github.com/sgl-project/sglang/issues/2450)).
 
-## Deploying DeepSeek R1
+## Deploying DeepSeek-R1
 
-1. The original sglang docker image recommended is used:
+1. The original sglang docker image is used as recommended:
 ```bash
 docker pull lmsysorg/sglang:latest
 ```
 2. The following command will create a valid docker container to host `DeepSeek R1`.
-  - Its needed to mount a volume with the location of the huggingface cache folder. By default is: `~/.cache/huggingface`
-  - Its needed to specify our `HF_TOKEN` to access huggingface API. It can be exported as a environment variables as seen in `--env "HF_TOKEN=$HF_TOKEN"`
+  - It is needed to mount a volume with the location of the huggingface cache folder. By default is: `~/.cache/huggingface`
+  - It is needed to specify our `HF_TOKEN` to access the huggingface API. It can be exported as an environment variable as seen in `--env "HF_TOKEN=$HF_TOKEN"`
 
 ```bash
 docker run --gpus all \
@@ -38,9 +38,9 @@ docker run --gpus all \
 python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-R1 --tp 8 --trust-remote-code --enable-dp-attention
 ```
 
-## Benchmarking DeepSeek R1
+## Benchmarking DeepSeek-R1
 
-4. The following command will perform a benchmark workload for 1 batch, 128 inputs token and 256 outputs token:
+4. The following command will perform a benchmark workload for 1 batch, 128 inputs token, and 256 outputs token:
 
 ```bash
 python3 -m sglang.bench_one_batch --batch-size 1 --input 128 --output 256 --model deepseek-ai/DeepSeek-R1  --trust-remote-code --tp 8 --enable-torch-compile --torch-compile-max-bs 1
@@ -64,7 +64,7 @@ Total. latency:  5.537 s, throughput:     69.35 token/s
 
 ```
 
-Two benchmarks are runned as sanity check. The final user will percieve the decode latency shown below:
+Two benchmarks are run as sanity checks. The final user will perceive the decode latency as shown below:
 ```bash
 Decode.  median latency: 0.02098 s, median throughput:     47.67 token/s
 ```
