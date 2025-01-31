@@ -1,7 +1,7 @@
 # Deploy DeepSeek-R1 671B on 8x NVIDIA H200 with DataCrunch
 
 ## Inference engine: SGLang
-SGLang is the recommended inference engine for deploying DeepSeek models, in particular [DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/DeepSeek_V3.pdf) and [Deep-Seek-R1](https://github.com/deepseek-ai/DeepSeek-R1/blob/main/DeepSeek_R1.pdf). SGLang currently supports MLA optimizations, DP Attention, FP8 (W8A8), FP8 KV Cache, and Torch Compile, enabling it to deliver state-of-the-art latency and throughput performance among other open-source frameworks.
+SGLang is the recommended inference engine for deploying DeepSeek models, in particular [DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/DeepSeek_V3.pdf)/[R1](https://github.com/deepseek-ai/DeepSeek-R1/blob/main/DeepSeek_R1.pdf). SGLang currently supports MLA optimizations, DP Attention, FP8 (W8A8), FP8 KV Cache, and Torch Compile, enabling it to deliver state-of-the-art latency and throughput performance among other open-source frameworks.
 
 Notably, SGLang v0.4.1 fully supports running DeepSeek-V3 on both NVIDIA and AMD GPUs, making it a highly versatile and robust solution. SGLang also supports multi-node tensor parallelism, enabling you to run this model on multiple network-connected machines.
 
