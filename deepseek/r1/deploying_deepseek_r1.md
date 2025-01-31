@@ -9,7 +9,8 @@ Multi-Token Prediction (MTP) is in development, and progress can be tracked in t
 
 We have been providing SGLang team GPU infrastructure targeting H200 aware-tunning for optimal performance. (see [H200 DeepSeek V3/R1 benchmarking](https://github.com/sgl-project/sglang/issues/2450)).
 
-## Deploying DeepSeek R1
+## Deploying DeepSeek R1
+
 1. The original sglang docker image recommended is used:
 ```bash
 docker pull lmsysorg/sglang:latest
