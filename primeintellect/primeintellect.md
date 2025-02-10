@@ -115,6 +115,7 @@ PRIME capabilities to handle dynamic node participation while maintaining traini
     <img src="images/number_active_training_nodes_over_training_steps.png" alt="Figure 6: Number of active training nodes over training steps.">
     <figcaption style="text-align: center;">Figure 6: Number of active training nodes over training steps.</figcaption>
 </figure>
+
 # Conclusion
 
 The feasibility of multi-datacenter training jobs has been demonstrated with techniques such as high-bandwidth inter-datacenter links, efficient gradient compression methods, and asynchronous training frameworks which have shown that geographically distributed training can achieve performance levels comparable to single-datacenter setups. These developments confirm that multi-datacenter training is not only practical but also advantageous in scenarios requiring scalability and fault tolerance.
