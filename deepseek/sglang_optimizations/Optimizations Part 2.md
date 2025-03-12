@@ -1,8 +1,7 @@
-# DeepSeek V3 SGLang Optimizations on H200
-
-This is the next iteration from [DeepSeek V3 LLM NVIDIA H200 GPU Inference Benchmarking](https://datacrunch.io/blog/deepseek-v3-llm-nvidia-h200-gpu-inference-benchmarking) targeting the different [optimizations](https://github.com/sgl-project/sglang/issues/2591) the sglang team, as the official and recommended inference serving of Deepseek v3, have performed. The most of these optimizations comes in the form of flags for the `launch_server` CLI, thus for each one, we will order them by topic, collect relevant code information, develop its context and problem they target, and expose its performance boost.
-
-## SGLang general optimizations
+    
+# DeepSeek V3 SGLang Optimizations
+    
+Continuing our technical series on DeepSeek V3 integration in SGLang, we want to discuss the various optimization strategies available for enhancing performance and efficiency. As an inference serving engine, SGLang interfaces with multiple components of the ML infrastructure stack, providing opportunities for optimization at different levels. Most of the optimizations comes in the form of flags for the `launch_server` CLI. These flags provide a convenient entry point into understanding the various performance enhancements that have been implemented over time in the SGLang ecosystem.
 
 ### Cuda Graphs and torch.compile
 
