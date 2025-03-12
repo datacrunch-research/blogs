@@ -740,7 +740,7 @@ $python3 benchmark/kernels/quantizationtuning_block_wise_fp8.py
 
 #### **Results:**
 
-Example of the optimal configuration for the kernel: `N=512,K=7168,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128]`
+Example of the **optimal** configuration by **batch size** for the kernel: `N=512,K=7168,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128]`
 
 ### FP8 GEMM CUTLASS implementation
 
@@ -857,7 +857,7 @@ Benchmark finished!
 #### **Results:**
 
 Benchmarks measure GB/s per batch size. Comparing vllm same kernel (int8 gemm) to sglang kernel we get more throughput for different batch sizes for different configurations (N and K).
-**Note**: We tested this benchmark using DeepSeek-Coder-V2-Lite-Instruct as the code for Deepseek-v3 isn’t implemented in SGLang.
+**Note**: We tested this benchmark using DeepSeek-Coder-V2-Lite-Instruct as the code for Deepseek-v3 isn’t implemented yet.
 
 ## MoE
 
@@ -876,29 +876,47 @@ Custom SGLang kernels for fusedMoE, inspired in the work of vllm. Composed of:
 
 #### **Benchmarks:**
 
+FusedMoE Tunning:
+
 ```bash
-$ python3 benchmark/kernels/fused_moe_triton/tuning_fused_moe_triton.py --model deepseek-ai/DeepSeek-V3 --tp-size 8  --dtype fp8_w
-8a8 --tune
-Namespace(model='deepseek-ai/DeepSeek-V3', tp_size=8, dtype='fp8_w8a8', seed=0, batch_size=None, tune=True)
-2025-03-11 06:08:00,564 INFO worker.py:1841 -- Started a local Ray instance.
-Start tuning over 1280 configurations...
-(BenchmarkWorker pid=819436) Tue Mar 11 06:50:51 2025] Completed tuning for batch_size=1                 
-(BenchmarkWorker pid=819437) Tue Mar 11 06:51:55 2025] Completed tuning for batch_size=2                 
-(BenchmarkWorker pid=819440) Tue Mar 11 06:51:55 2025] Completed tuning for batch_size=24 [repeated 6x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)                   
-(BenchmarkWorker pid=819436) Tue Mar 11 07:07:44 2025] Completed tuning for batch_size=64                 
-(BenchmarkWorker pid=819437) Tue Mar 11 07:08:46 2025] Completed tuning for batch_size=96                 
-(BenchmarkWorker pid=819435) Tue Mar 11 07:09:04 2025] Completed tuning for batch_size=128               
-(BenchmarkWorker pid=819439) Tue Mar 11 07:09:19 2025] Completed tuning for batch_size=256               
-(BenchmarkWorker pid=819438) Tue Mar 11 07:09:41 2025] Completed tuning for batch_size=512               
-(BenchmarkWorker pid=819440) Tue Mar 11 07:11:01 2025] Completed tuning for batch_size=1024               
-(BenchmarkWorker pid=819441) Tue Mar 11 07:12:20 2025] Completed tuning for batch_size=1536               
-(BenchmarkWorker pid=819456) Tue Mar 11 07:14:12 2025] Completed tuning for batch_size=2048               
-(BenchmarkWorker pid=819436) Tue Mar 11 07:31:57 2025] Completed tuning for batch_size=3072               
-(BenchmarkWorker pid=819437) Tue Mar 11 07:35:50 2025] Completed tuning for batch_size=4096                                                                               
-Writing best config to E=256,N=256,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128].json...                                                                       
-Tuning took 5267.05 seconds
+$ python3 benchmark/kernels/fused_moe_triton/tuning_fused_moe_triton.py --model deepseek-ai/DeepSeek-V3 --tp-size 8  --dtype fp8_w8a8 --tune
+```
+FusedMoE benchmarking sgl-kernel vs vllm:
+
+```bash
+python3 benchmark/kernels/fused_moe_triton/benchmark_vllm_vs_sglang_fused_moe_triton.py
+[...]
+benchmark sglang_fused_moe_triton with batch_size=505
+benchmark vllm_fused_moe_triton with batch_size=506
+benchmark sglang_fused_moe_triton with batch_size=506
+benchmark vllm_fused_moe_triton with batch_size=507
+benchmark sglang_fused_moe_triton with batch_size=507
+benchmark vllm_fused_moe_triton with batch_size=508
+benchmark sglang_fused_moe_triton with batch_size=508
+benchmark vllm_fused_moe_triton with batch_size=509
+benchmark sglang_fused_moe_triton with batch_size=509
+benchmark vllm_fused_moe_triton with batch_size=510
+benchmark sglang_fused_moe_triton with batch_size=510
+benchmark vllm_fused_moe_triton with batch_size=511
+benchmark sglang_fused_moe_triton with batch_size=511
+benchmark vllm_fused_moe_triton with batch_size=512
+benchmark sglang_fused_moe_triton with batch_size=512
+
+fused-moe-performance:
+[...]
+     batch_size  vllm_fused_moe_triton  sglang_fused_moe_triton
+505       506.0               1.014688                 0.507488
+506       507.0               1.011744                 0.509344
+507       508.0               1.007200                 0.504288
+508       509.0               1.007232                 0.505696
+509       510.0               1.007792                 0.507712
+510       511.0               1.011072                 0.507248
+511       512.0               1.012992                 0.507840
 ```
 
+
+#### Results:
+We obtain the best FusedMoE configuration for different batch sizes:
 ```bash
 {
     "1": {
@@ -1046,7 +1064,7 @@ Tuning took 5267.05 seconds
         "num_stages": 3
     }
 }
-```
+````
 ## Anex
 
 ### **1. Code modification for `test_bmm_fp8.py`**
