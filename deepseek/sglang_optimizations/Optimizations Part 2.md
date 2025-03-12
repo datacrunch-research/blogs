@@ -19,7 +19,7 @@ Continuing the series of technical blogs initiated in [DeepSeek V3 LLM NVIDIA H2
 CUDA Graphs capture **decode** operations for a given model and generates an execution graph with all the operations performed wrapped, to be executed in one go. The resultant graphs not only depends on the operations performed but on the batch sizes to be captured (`—cuda_graph_bs`).
 
 #### **Commits**:
-([Support CUDA graph for triton backend](https://github.com/sgl-project/sglang/pull/1401), [MoE torch.compile](https://github.com/sgl-project/sglang/pull/1497), [Support for DP Attention](https://github.com/sgl-project/sglang/pull/2061), [Support Multi-node DP Attention](https://github.com/sgl-project/sglang/pull/2925), [Eagle speculative decoding support](https://github.com/sgl-project/sglang/pull/2684))
+([Support CUDA graph for triton backend](https://github.com/sgl-project/sglang/pull/1401), [Support cuda graph for DP attention #2061](https://github.com/sgl-project/sglang/pull/2061))
 
 `—disable-cuda-graph` disables both torch.compiler compilation for cuda graphs and cuda graphs optimizations (`model_runner.py` Line 740)
 
