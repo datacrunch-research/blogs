@@ -1,10 +1,8 @@
-# DeepSeek V3 SGLang Optimizations on H200
+# DeepSeek V3 SGLang Optimizations on H200 GPUs
 
-This is the next iteration from [DeepSeek V3 LLM NVIDIA H200 GPU Inference Benchmarking](https://datacrunch.io/blog/deepseek-v3-llm-nvidia-h200-gpu-inference-benchmarking) targeting the different [optimizations](https://github.com/sgl-project/sglang/issues/2591) the sglang team, as the official and recommended inference serving of Deepseek v3, have performed. The most of these optimizations comes in the form of flags for the `launch_server` CLI, thus for each one, we will order them by topic, collect relevant code information, develop its context and problem they target, and expose its performance boost.
+Continuing the series of technical blogs initiated in [DeepSeek V3 LLM NVIDIA H200 GPU Inference Benchmarking](https://datacrunch.io/blog/deepseek-v3-llm-nvidia-h200-gpu-inference-benchmarking). This time we focus on the different [optimizations](https://github.com/sgl-project/sglang/issues/2591) the sglang team, as the official and recommended inference serving of Deepseek v3, have performed. The most of these optimizations comes in the form of flags for the `launch_server` CLI, thus for each one, we will order them by topic, collect relevant code information, develop its context and problem they target, and expose its performance boost.
 
-## SGLang general optimizations
-
-### Cuda Graphs and torch.compile
+## SGLang general improvements
 
 ### **CUDA Graphs**
 
@@ -573,7 +571,7 @@ P99 ITL (ms):                            29248.21
 
 #### **Results:**
 
-The results shows that something is not working properly as the latency and general throughput are better when disabling the scheduler overlap.
+The results shows that this optimizations is yet to be fully leverage as the latency and general throughput are better when disabling the scheduler overlap.
 
 ### FlashInfer prefill and MLA decoding
 
@@ -585,10 +583,10 @@ The results shows that something is not working properly as the latency and gene
 
 #### **Context:**
 
-FlashInfer backend instead of triton.
+To speedup prefill and decode phase, its proposed to use the FlashInfer backend instead of the Triton default one.
 
 #### **Commits:**
-([Add fast decode plan for flashinfer mla,](https://github.com/sgl-project/sglang/pull/3987) [MLA prefill w/o weight absorption](https://github.com/sgl-project/sglang/pull/2349))
+([Add fast decode plan for flashinfer mla](https://github.com/sgl-project/sglang/pull/3987), [MLA prefill w/o weight absorption](https://github.com/sgl-project/sglang/pull/2349))
 
 #### **Benchmarks:**
 
@@ -668,7 +666,7 @@ More output throughput, less latency, same or slighly better accuracy.
 
 Open source code released by sglang team to perform fp8 blockwise quantization tunning for tailored performance.
 
-It contains specific fp8 gemm code for AMD or CUDA kernels that benchmark different kernel shapes for each GPU, obtaining the most performant configuration based on latency.
+It contains specific fp8 gemm code for AMD or CUDA kernels that benchmark different kernel shapes for different batch sizes, obtaining the most performant configuration based on latency.
 
 Key functions:
 
