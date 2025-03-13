@@ -636,9 +636,9 @@ More output throughput, less latency, same or slighly better accuracy.
 
 #### **Context:**
 
-Open source code released by sglang team to perform fp8 blockwise quantization tunning for tailored performance.
+SGLang employs FP8 blockwise quantization tuning to optimize performance for different GPUs. The implementation specifically benchmarks FP8 GEMM (General Matrix Multiplication) kernels across AMD and CUDA architectures, testing different block shapes to determine the most efficient configuration based on latency.
 
-It contains specific fp8 gemm code for AMD or CUDA kernels that benchmark different kernel shapes for each GPU, obtaining the most performant configuration based on latency.
+This approach ensures that blockwise quantization aligns with the optimal block size for GEMM operations, minimizing precision loss while maximizing computational efficiency. The computations are performed in FP8, but accumulation occurs in BF16 to maintain numerical stability before final output storage.
 
 Key functions:
 
