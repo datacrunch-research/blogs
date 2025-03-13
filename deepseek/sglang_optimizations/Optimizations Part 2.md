@@ -215,7 +215,7 @@ Similarity between results are nearly identical (cosine similarity = 1 identical
 
 Speculative decoding accelerates inference by introducing a draft model (a smaller, faster model) that generates multiple tokens at once. A verification step then checks if these draft tokens match the predictions of the larger, more accurate LLM.
 
-Its major flaw is that as naive speculative decoding generate a single ****linear sequence of draft tokens if even a single token in the sequence is rejected, all subsequent tokens are discarded, lowering the acceptance rate.
+Its major flaw is that as naive speculative decoding generate a single linear sequence of draft tokens if even a single token in the sequence is rejected, all subsequent tokens are discarded, lowering the acceptance rate.
 
 Sglang implementation of NextN is based on EAGLE-2 and SpecInfer:
 
@@ -600,9 +600,9 @@ Due to FlashInfer fused operation, we obtain less latency and more output throug
 
 #### **Context:**
 
-To prevent numerical overflow, values are scaled down before being quantizied using the max element of the matrix, although this makes it sensitive to outliers values. To avoid it, Deepseek team propose blockwise and tilewise scaling, in which each 128×128 submatrix of a weight matrix and each 1×128 subvector of an activation vector is scaled and quantized separately.
+Numerical overflow occurs when a value exceeds the representable range of a given numerical format (like FP8), causing incorrect or infinite values. In the context of FP8 quantization on Tensor Cores, overflow happens because FP8 has a very limited dynamic range. To prevent numerical overflow, values are scaled down before being quantizied using the max element of the matrix, although this makes it sensitive to outliers values. To avoid it, Deepseek team propose blockwise and tilewise scaling, in which each 128×128 submatrix of a weight matrix and each 1×128 subvector of an activation vector is scaled and quantized separately.
 
-Accumulation precision of FP8 GEMM on NVIDIA H800 Tensor Cores is limited to retaining around `14 bits`, which is significantly lower than FP32 accumulation precision. Thats why Deepseek uses a separate FP32 accumulator register using CUDA Cores thus mitigating the loss of accuracy. The dequantizing scaling factor is also applied to this FP32 accumulator.
+The FP8 GEMM accumulation on NVIDIA H800 Tensor Cores is limited to about `14 bits` of precision, which is significantly lower than FP32 accumulation precision. Thats why Deepseek uses a separate FP32 accumulator register using CUDA Cores thus mitigating the loss of accuracy. The dequantizing scaling factor is also applied to this FP32 accumulator.
 
 ![fp8_deepseek.png](imgs/fp8_deepseek.png)
 
