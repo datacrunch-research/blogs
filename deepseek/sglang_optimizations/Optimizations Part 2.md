@@ -716,7 +716,7 @@ Example of the optimal configuration for the kernel: `N=512,K=7168,device_name=N
 
 #### Context:
 
-Due to blockwise scaling, these operations need to be fused into the FP8 matmul operations.`sgl-kernel/src/sgl-kernel/csrc/int8_gemm_kernel.cu` contains CUDA-accelerated implementation of integer 8-bit (int8) scaled matrix multiplication fused with W8A8 quantization.
+The quantization operation can therefore be fused into the FP8 matmul operation for efficiency. In `sgl-kernel/src/sgl-kernel/csrc/int8_gemm_kernel.cu` there is CUDA-accelerated implementation of integer 8-bit (int8) scaled matrix multiplication fused with W8A8 quantization.
 
 #### **Commits:** 
 ([support w8a8 fp8 kernel with CUTLASS #3047](https://github.com/sgl-project/sglang/pull/3047) , [Support cutlass Int8 gemm #2752](https://github.com/sgl-project/sglang/pull/2752)**,** [](https://github.com/NVIDIA/cutlass/pull/1932)[Support sm90 Int8 gemm#3035](https://github.com/sgl-project/sglang/pull/3035)**,** [Blockwise Scaling for FP8 #1932 from NVIDIA/cutlass](https://github.com/NVIDIA/cutlass/pull/1932))
