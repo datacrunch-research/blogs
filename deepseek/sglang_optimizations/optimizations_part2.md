@@ -1,11 +1,13 @@
-    
+
 # DeepSeek V3 SGLang Optimizations
-    
+
 Continuing our technical series on DeepSeek V3 integration in SGLang, we want to discuss the various optimization strategies available for enhancing performance and efficiency. As an inference serving engine, SGLang interfaces with multiple components of the ML infrastructure stack, providing opportunities for optimization at different levels. Most of the optimizations comes in the form of flags for the `launch_server` CLI. These flags provide a convenient entry point into understanding the various performance enhancements that have been implemented over time in the SGLang ecosystem.
 
 ### Summary table of optimzations
 
 <span style="color:red">This table can then be hyperlinked to the relevant sections.</span>
+
+<span style="color:green">Such a good idea, but I've checked and we would need to change headers to html messing with the dynamic web index already created, so for this I think i will be enough with our frontend ppl work</span>
 
 | Optimization                              | Description / Benefit                                             | Related Flags / Notes                                              |
 |------------------------------------------|-------------------------------------------------------------------|--------------------------------------------------------------------|
@@ -38,6 +40,10 @@ Continuing our technical series on DeepSeek V3 integration in SGLang, we want to
 
 Both the [Cuda graph](https://pytorch.org/blog/accelerating-pytorch-with-cuda-graphs/) and [`torch.compile`](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) flags deal with improving the efficiency of kernel operations. CUDA graphs significantly reduce kernel launch overhead by recording and replaying sequences of CUDA operations as a single unit, eliminating the per-kernel launch costs during inference. Meanwhile, `torch.compile` employs kernel fusion, operator elimination, and specialized kernel selection to optimize the computational graph. However, SGLang `torch.compile` can use either the Pytorch-generated graph or the Cuda graph to link the two optimizations.
 
+#### **Commits:**
+
+([Support CUDA graph for triton backend](https://github.com/sgl-project/sglang/pull/1401), [Support cuda graph for DP attention #2061](https://github.com/sgl-project/sglang/pull/2061))
+
 
 #### **Benchmarks:**
 
@@ -65,8 +71,6 @@ As expected, when stacking optimizations ( torch.compiler / cuda graphs + torch.
 
 **Note:** Due to initial increase compute by torch.compiler compilations and cuda graphs not capturing prefill phase operations, we see a degradation in the prefill phase latency (`0.21180 / 0.25809 / 0.26079 s`) and throughput (`1208.67 / 991.92 / 981.64 token/s`)
 
-
-
 ### bf16 Batch Matrix Multiplication (bmm)
 
 #### **Context:**
@@ -83,13 +87,13 @@ Batch matrix multiplications are the main workload performed in LLMs. As Deepsee
 $ pytest -s test_bmm_fp8.py
 ```
 
-* Results obtained with a modified versiong of `test_bmm_fp8.py` (Anex 1)
+* Results obtained with a modified versiong of `test_bmm_fp8.py` 
 
 ![bmm-bench](imgs/fp8_latency_comparison.png) 
 
 #### **Results:**
 
-Similarity between results are nearly identical (cosine similarity = 1 identical) while latency for fp8 is worse than bf16 due to casting compute. 
+Similarity between results are nearly identical (cosine similarity = 1 identical) which denotes no loose on accuracy. While latency for fp8 is worse than bf16 due to casting compute. 
 
 ### Support nextn speculative decoding
 
@@ -207,6 +211,8 @@ For larger batch sizes (in this case 10000), we see an overall improvement in bo
 ### Support overlap scheduler with DP Attention
 
 <span style="color:red">We need to check this as I thought the low CPU latency is one of their advantages. If it doesnt work perhaps remove it.</span>
+
+<span style="color:green">Hope we are doing sth bad and sglang ppl correct it, cause is such a nice feature</span>
 
 
 #### **Related flags:**
@@ -370,6 +376,8 @@ Due to FlashInfer fused operation, we obtain less latency and more output throug
 <span style="color:red">Is this a Deepseek thing, or something done also in FlashAttention?
 </span>
 
+<span style="color:green">Yes, its a DeepSeek optimization. FlashAttention as we know doesnt need the quantization step</span>
+
 #### **Context:**
 
 Numerical overflow occurs when a value exceeds the representable range of a given numerical format (like FP8), causing incorrect or infinite values. In the context of FP8 quantization on Tensor Cores, overflow happens because FP8 has a very limited dynamic range. To prevent numerical overflow, values are scaled down before being quantizied using the max element of the matrix, although this makes it sensitive to outliers values. To avoid it, the Deepseek team propose a blockwise and tilewise scaling, in which each 128×128 submatrix of a weight matrix and each 1×128 subvector of an activation vector is scaled and quantized separately.
@@ -414,8 +422,23 @@ config: Dict[str, Any],  # Kernel configuration parameters
 output_dtype: torch.dtype = torch.float16,  # Precision of output
 ```
 
+```bash
+# fn: tune(M, N, K, block_size, out_dtype, search_space):
+M,N,K: int  # Shape of the matrix multiplication (M × K @ K × N → M × N)
+block_size: int # Tuple defining blockwise quantization size ([block_n, block_k])
+out_dtype: str # Output precision (e.g., float16, bfloat16)
+search_space: List[dict{str,int}] # List of configurations to test (e.g., block sizes, number of warps).
 
-Output example: `N=512,K=7168,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128].json`
+# search_space example:
+{
+"BLOCK_SIZE_M": block_m,
+"BLOCK_SIZE_N": block_n,
+"BLOCK_SIZE_K": block_k,
+"GROUP_SIZE_M": group_size,
+"num_warps": num_warps,
+"num_stages": num_stages,
+}
+```
 
 #### **Commits:** 
 ([add tuning block wise fp8#3242](https://github.com/sgl-project/sglang/pull/3242))
@@ -424,20 +447,53 @@ Output example: `N=512,K=7168,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape
 
 ```bash
 $python3 benchmark/kernels/quantizationtuning_block_wise_fp8.py
-
 ```
 
 #### **Results:**
 
 Example of the optimal configuration for the kernel: `N=512,K=7168,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128]`
 
+```bash
+[...]
+{
+    "2048": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 1,
+        "num_warps": 4,
+        "num_stages": 4
+    },
+    "3072": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 1,
+        "num_warps": 4,
+        "num_stages": 3
+    },
+    "4096": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 64,
+        "num_warps": 4,
+        "num_stages": 3
+    }
+}
+```
+
 <span style="color:red">Some text here explaining the result would be good? Like what are the implications.
 </span>
+
+For all batch sizes to be tuned and a given FP8 dtype, the script test and compare different model weights dimensions (N and K) to optimize FP8 GEMM block-wise quantization based on lowest latency. Obtaining the most optimal configuration per batch size for the block tiling dimension(`BLOCK_SIZE_M/N/K`), the group size (`GROUP_SIZE_M`) for then number of tiles grouped together improving the L2 cache usage, number of warps (`num_warps`) per thread block (i.e., per tile) and number of stages (`num_stages`) for block loading into shared memory as a prefetching. This enable an autotunning of the compute parameters for diferent configurations.
 
 ### FP8 GEMM CUTLASS implementation
 <span style="color:red">Why are we comparing to vLLM here unless this is the non-fused kernel, then we need to state that?
 The tite of the blog is about deepseek v3 optimizations and this isnt part of it so raises the question is it relevant.
 </span>
+
+<span style="color:green">They reasons are: they use vLLM as baseline for all their experimentation (coherent with sglang standars), as the first took what vLLM did and improve upon it (a quantitative way of measuring SoTA implementations, as they only really compete with vLLM).  Is true that this is not a direct deepseek optimization, but it has to do with it because of the use of FP8 quantization and being listed as a Deepseekv3 Optimization in their issue.</span>
 
 
 #### Context:
@@ -445,7 +501,7 @@ The tite of the blog is about deepseek v3 optimizations and this isnt part of it
 The quantization operation can be fused into the FP8 matmul operation for efficiency. In `sgl-kernel/src/sgl-kernel/csrc/int8_gemm_kernel.cu` there is CUDA-accelerated implementation of integer 8-bit (int8) scaled matrix multiplication fused with W8A8 quantization.
 
 #### **Commits:** 
-([support w8a8 fp8 kernel with CUTLASS #3047](https://github.com/sgl-project/sglang/pull/3047) , [Support cutlass Int8 gemm #2752](https://github.com/sgl-project/sglang/pull/2752)**,** [](https://github.com/NVIDIA/cutlass/pull/1932)[Support sm90 Int8 gemm#3035](https://github.com/sgl-project/sglang/pull/3035)**,** [Blockwise Scaling for FP8 #1932 from NVIDIA/cutlass](https://github.com/NVIDIA/cutlass/pull/1932))
+([support w8a8 fp8 kernel with CUTLASS #3047](https://github.com/sgl-project/sglang/pull/3047) , [Support cutlass Int8 gemm #2752](https://github.com/sgl-project/sglang/pull/2752), [Support sm90 Int8 gemm#3035](https://github.com/sgl-project/sglang/pull/3035), [Blockwise Scaling for FP8 #1932 from NVIDIA/cutlass](https://github.com/NVIDIA/cutlass/pull/1932))
 
 #### **Benchmarks:**
 
@@ -467,14 +523,24 @@ Benchmarks measure GB/s per batch size (another measure of throughput). Comparin
 <span style="color:red">Again Some text here explaining the result would be good? Like what are the implications how is it used in SGLang?
 </span>
 
+Implements the fused computation for a Mixture of Experts (MOE) using token and expert matrices.
+Multiplies `A @ B` (token × expert matmul) using top-k routing.
+Supports:
+
+- `fp16`, `bfloat16`, `fp8`, `int8` formats
+- Weight/activation scaling via `A_scale`, `B_scale`
+- Block-wise quantization
+- Expert-wise routing via `expert_ids`
 
 #### **Context:**
 
-Custom SGLang kernels for fusedMoE, inspired in the work of vllm. Composed of: 
+Custom SGLang kernels for fusedMoE, using vLLM as reference and baseline. Composed of: 
 
 `tuning_fused_moe_triton.py`: A tool for tuning the `fused_moe_triton` kernel. Adapted from [vllm's benchmark_moe.py](https://github.com/vllm-project/vllm/blob/main/benchmarks/kernels/benchmark_moe.py), with added support for various model architectures.
 
 `benchmark_vllm_vs_sglang_fused_moe_triton.py`: A tool for comparing the performance of fused MoE kernels between vllm and sglang implementations. Supports various model architectures and data types.
+
+`benchmark_torch_compile_fused_moe.py`: A tool for benchmarking the performance of the fused MoE kernel with `torch.compile` and original fused MoE kernel.
 
 #### **Commits:** 
 ([Add unitest for fused_moe](https://github.com/sgl-project/sglang/pull/2416), [MoE Expert Parallel Impl](https://github.com/sgl-project/sglang/pull/2203), [`benchmark/kernels/fused_moe_triton/README.md`](https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton))
@@ -482,13 +548,81 @@ Custom SGLang kernels for fusedMoE, inspired in the work of vllm. Composed of:
 #### **Benchmarks:**
 
 ```bash
-$ python3 benchmark/kernels/fused_moe_triton/tuning_fused_moe_triton.py --model deepseek-ai/DeepSeek-V3 --tp-size 8  --dtype fp8_w
-8a8 --tune
+$ python3 benchmark/kernels/fused_moe_triton/tuning_fused_moe_triton.py --model deepseek-ai/DeepSeek-V3 --tp-size 8  --dtype fp8_w8a8 --tune
                                                                           
 Writing best config to E=256,N=256,device_name=NVIDIA_H200,dtype=fp8_w8a8,block_shape=[128, 128].json...                                                                       
 Tuning took 5267.05 seconds
 ```
 
+FusedMoE benchmarking sgl-kernel vs vllm:
+```bash
+python3 benchmark/kernels/fused_moe_triton/benchmark_vllm_vs_sglang_fused_moe_triton.py
+[...]
+benchmark sglang_fused_moe_triton with batch_size=505
+benchmark vllm_fused_moe_triton with batch_size=506
+benchmark sglang_fused_moe_triton with batch_size=506
+benchmark vllm_fused_moe_triton with batch_size=507
+benchmark sglang_fused_moe_triton with batch_size=507
+benchmark vllm_fused_moe_triton with batch_size=508
+benchmark sglang_fused_moe_triton with batch_size=508
+benchmark vllm_fused_moe_triton with batch_size=509
+benchmark sglang_fused_moe_triton with batch_size=509
+benchmark vllm_fused_moe_triton with batch_size=510
+benchmark sglang_fused_moe_triton with batch_size=510
+benchmark vllm_fused_moe_triton with batch_size=511
+benchmark sglang_fused_moe_triton with batch_size=511
+benchmark vllm_fused_moe_triton with batch_size=512
+benchmark sglang_fused_moe_triton with batch_size=512
+
+fused-moe-performance:
+[...]
+     batch_size  vllm_fused_moe_triton  sglang_fused_moe_triton
+505       506.0               1.014688                 0.507488
+506       507.0               1.011744                 0.509344
+507       508.0               1.007200                 0.504288
+508       509.0               1.007232                 0.505696
+509       510.0               1.007792                 0.507712
+510       511.0               1.011072                 0.507248
+511       512.0               1.012992                 0.507840
+````
+
+#### Results:
+
+We perform the tunning for the fused MoE kernel for Deepseekv3 with FP8 quantization, obtanining the optimal configuration for each batch size similar to when tunning FP8 GEMM:
+
+> for the block tiling dimension(`BLOCK_SIZE_M/N/K`), the group size (`GROUP_SIZE_M`) for then number of tiles grouped together improving the L2 cache usage, number of warps (`num_warps`) per thread block (i.e., per tile) and number of stages (`num_stages`) for block loading into shared memory as a prefetching.
+
+```bash
+[...]
+"2048": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 32,
+        "num_warps": 4,
+        "num_stages": 3
+    },
+    "3072": {
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 16,
+        "num_warps": 4,
+        "num_stages": 4
+    },
+    "4096": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 32,
+        "num_warps": 4,
+        "num_stages": 3
+    }
+```
+
+We then compare the latency for the fused MoE kernel implementation of SGLang with the baseline implementation from vLLM obtaining a more refined version with almost costant latency when incrementing the batch size.
+
+![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/fused-moe-performance.png)
 
 ## References
 
