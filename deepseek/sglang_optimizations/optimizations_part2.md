@@ -241,7 +241,7 @@ python3 -m sglang.bench_serving --backend sglang --dataset-name random --num-pro
 
 #### **Results:**
 
-![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/ovelap_scheduler_latency.png)
+![fig_overlap](imgs/ovelap_scheduler_latency.png)
 
 We see a general reduction in latency: End to end (standard:`1080152.26s`| overlap: `1066166.84s`), Time per Output Token (standard:`348.10s`| overlap: 196.79s`) and inter-token latency (standard:`350.62s`| overlap: 197.96s`) although Time to first token presents a degradation result of the scheduling overhead (standard: `724050.93s`| overlap: `864850.926s`).
 
