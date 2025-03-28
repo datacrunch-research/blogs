@@ -322,7 +322,7 @@ python3 benchmark/gsm8k/bench_sglang.py --num-shots 8 --num-questions 1319 --par
 
 ![fig6.png](imgs/fp8_vs_bf16.png)
 
-More output throughput, less latency, for same accuracy (`0.955s` vs `0.957s` on gsm8k).
+More output throughput, less latency, for same accuracy (`0.955` vs `0.957` on gsm8k).
 
 ### Tunning FP8 GEMM
 
