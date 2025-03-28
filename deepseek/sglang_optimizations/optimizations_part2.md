@@ -498,7 +498,7 @@ fused-moe-performance:
 511       512.0               1.012992                 0.507840
 ````
 
-#### Results:
+#### Results:
 
 We perform the tunning for the fused MoE kernel for Deepseekv3 with FP8 quantization, obtanining the optimal configuration for each batch size similar to when tunning FP8 GEMM:
 
@@ -534,7 +534,7 @@ We perform the tunning for the fused MoE kernel for Deepseekv3 with FP8 quantiza
 
 We then compare the latency for the fused MoE kernel implementation of SGLang with the baseline implementation from vLLM obtaining a more refined version with almost costant latency when incrementing the batch size.
 
-![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/fused_moe_latency_comparison.png)
+![fig7](imgs/fused_moe_latency_comparison.png)
 
 ## References
 
