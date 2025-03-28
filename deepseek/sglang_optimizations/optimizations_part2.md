@@ -5,10 +5,6 @@ Continuing our technical series on DeepSeek V3 integration in SGLang, we want to
 
 ### Summary table of optimzations
 
-<span style="color:red">This table can then be hyperlinked to the relevant sections.</span>
-
-<span style="color:green">Such a good idea, but I've checked and we would need to change headers to html messing with the dynamic web index already created, so for this I think i will be enough with our frontend ppl work</span>
-
 | Optimization                              | Description / Benefit                                             | Related Flags / Notes                                              |
 |------------------------------------------|-------------------------------------------------------------------|--------------------------------------------------------------------|
 | **CUDA Graph Execution**                 | Reduces kernel launch overhead by replaying recorded CUDA ops     | `--cuda_graph_max_bs`, `--disable_cuda_graph`                      |
@@ -61,12 +57,13 @@ $ python3 -m sglang.bench_one_batch --batch-size 1  --input 256
 $ python3 -m sglang.bench_one_batch --batch-size 1  --input 256
 --output 32 --model deepseek-ai/DeepSeek-V3  --trust-remote-code  --tp 8
 --enable-torch-compile --torch-compile-max-bs 1 --cuda-graph-max-bs 1
-
+ 
 ```
 
-![compile-bench](imgs/cuda_graph_benchmark.png) 
-
 #### **Results:**
+
+![compile-bench](imgs/cuda_graph_benchmark.png)
+
 As expected, when stacking optimizations ( torch.compiler / cuda graphs + torch.compiler / torch.compiler(cuda graphs) + torch.compiler) we reduce total latency (`7.322 / 1.256 / 1.011 s`) and improve total throughput (`39.34 / 229.27 / 284.86 token/s`).
 
 **Note:** Due to initial increase compute by torch.compiler compilations and cuda graphs not capturing prefill phase operations, we see a degradation in the prefill phase latency (`0.21180 / 0.25809 / 0.26079 s`) and throughput (`1208.67 / 991.92 / 981.64 token/s`)
@@ -87,11 +84,11 @@ Batch matrix multiplications are the main workload performed in LLMs. As Deepsee
 $ pytest -s test_bmm_fp8.py
 ```
 
-* Results obtained with a modified versiong of `test_bmm_fp8.py` 
-
-![bmm-bench](imgs/fp8_latency_comparison.png) 
+* Results obtained with a modified versiong of `test_bmm_fp8.py`  
 
 #### **Results:**
+
+![bmm-bench](imgs/fp8_latency_comparison.png)
 
 Similarity between results are nearly identical (cosine similarity = 1 identical) which denotes no loose on accuracy. While latency for fp8 is worse than bf16 due to casting compute. 
 
@@ -137,14 +134,12 @@ python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-
 
 ```bash
 python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-V3 --speculative-algo NEXTN --speculative-draft SGLang/DeepSeek-V3-NextN --speculative-num-steps 2 --speculative-eagle-topk 4 --speculative-num-draft-tokens 4 --tp 8 --trust-remote-code
-python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-input 256 --random-output 32 --random-range-ratio 1 --num-prompts 1 --host 127.0.0.1 --port 30000
+python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-input 256 --random-output 32 --random-range-ratio 1 --num-prompts 1 --host 127.0.0.1 --port 30000 
 ```
 
-
-
-![spec-bench](imgs/speculative_serving.png) 
-
 #### **Results:**
+
+![spec-bench](imgs/speculative_serving.png)
 
 We achieve and overall improvement of general throughput (Request, input and output) and a important (x6) reduction on end-to-end latency.
 
@@ -200,19 +195,15 @@ python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-
 python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-input 1 --random-output 512 --random-range-ratio 1 --num-prompts 10000 --host 127.0.0.1 --port 30000
 ```
 
-![dp-bench](imgs/dp_attention.png)
-
 #### **Results:**
+
+![dp-bench](imgs/dp_attention.png)
 
 As it is a scheduler paradigm, it performs better when using large batch sizes, if not the overhead added is bigger than the actual data parallelization.
 
 For larger batch sizes (in this case 10000), we see an overall improvement in both prefill and decode phases. From end-to-end latency, overall throughput and concurrency.
 
 ### Support overlap scheduler with DP Attention
-
-<span style="color:red">We need to check this as I thought the low CPU latency is one of their advantages. If it doesnt work perhaps remove it.</span>
-
-<span style="color:green">Hope we are doing sth bad and sglang ppl correct it, cause is such a nice feature</span>
 
 
 #### **Related flags:**
@@ -240,90 +231,21 @@ python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-V3 --tp 8 --trust-r
 python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-input 256 --random-output 32 --random-range-ratio 1 --num-prompts 10000 --host 127.0.0.1 --port 30000
 ```
 
-```bash
-# Input tokens: 2560000 (256)
-# Output tokens: 320000 (32)
-# Batch size: 10000
-
-============ Serving Benchmark Result ============
-Backend:                                 sglang    
-Traffic request rate:                    inf       
-Max reqeuest concurrency:                not set   
-Successful requests:                     10000     
-Benchmark duration (s):                  293.55    
-Total input tokens:                      2560000   
-Total generated tokens:                  320000    
-Total generated tokens (retokenized):    317484    
-Request throughput (req/s):              34.07     
-Input token throughput (tok/s):          8720.78   
-Output token throughput (tok/s):         1090.10   
-Total token throughput (tok/s):          9810.88   
-Concurrency:                             6070.84   
-----------------End-to-End Latency----------------
-Mean E2E Latency (ms):                   178210.55 
-Median E2E Latency (ms):                 157435.18 
----------------Time to First Token----------------
-Mean TTFT (ms):                          145935.97 
-Median TTFT (ms):                        141775.21 
-P99 TTFT (ms):                           277559.21 
------Time per Output Token (excl. 1st token)------
-Mean TPOT (ms):                          1041.12   
-Median TPOT (ms):                        947.28    
-P99 TPOT (ms):                           7600.99   
----------------Inter-token Latency----------------
-Mean ITL (ms):                           1186.69   
-Median ITL (ms):                         251.08    
-P99 ITL (ms):                            28399.72  
-==================================================
-```
-
 No flags → enable overlap scheduler
 
 ```bash
 python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-V3 --tp 8 --trust-remote-code
-python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-input 256 --random-output 32 --random-range-ratio 1 --num-prompts 10000 --host 127.0.0.1 --port 30000
-```
 
-```bash
-# Input tokens: 2560000 (256)
-# Output tokens: 320000 (32)
-# Batch size: 10000
-
-============ Serving Benchmark Result ============
-Backend:                                 sglang    
-Traffic request rate:                    inf       
-Max reqeuest concurrency:                not set   
-Successful requests:                     10000     
-Benchmark duration (s):                  304.19    
-Total input tokens:                      2560000   
-Total generated tokens:                  320000    
-Total generated tokens (retokenized):    317539    
-Request throughput (req/s):              32.87     
-Input token throughput (tok/s):          8415.90   
-Output token throughput (tok/s):         1051.99   
-Total token throughput (tok/s):          9467.88   
-Concurrency:                             6063.35   
-----------------End-to-End Latency----------------
-Mean E2E Latency (ms):                   184438.68 
-Median E2E Latency (ms):                 204926.41 
----------------Time to First Token----------------
-Mean TTFT (ms):                          147687.43 
-Median TTFT (ms):                        144274.50 
-P99 TTFT (ms):                           280238.25 
------Time per Output Token (excl. 1st token)------
-Mean TPOT (ms):                          1185.52   
-Median TPOT (ms):                        1014.91   
-P99 TPOT (ms):                           7837.04   
----------------Inter-token Latency----------------
-Mean ITL (ms):                           1372.83   
-Median ITL (ms):                         234.99    
-P99 ITL (ms):                            29248.21  
-==================================================
+python3 -m sglang.bench_serving --backend sglang --dataset-name random --num-prompts 2500 --random-input-len 1024 --random-output-len 1024 --random-range-ratio 1
 ```
 
 #### **Results:**
 
-The results shows that something is not working properly as the latency and general throughput are better when disabling the scheduler overlap.
+![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/ovelap_scheduler_latency.png)
+
+We see a general reduction in latency: End to end (standard:`1080152.26s`| overlap: `1066166.84s`), Time per Output Token (standard:`348.10s`| overlap: 196.79s`) and inter-token latency (standard:`350.62s`| overlap: 197.96s`) although Time to first token presents a degradation result of the scheduling overhead (standard: `724050.93s`| overlap: `864850.926s`).
+
+With larger request sizes for inputs and outputs the effect of the overlap scheduler will be even more noticeable.
 
 ### FlashInfer prefill and MLA decoding
 
@@ -351,7 +273,6 @@ python3 benchmark/gsm8k/bench_sglang.py --num-shots 8 --num-questions 1319 --par
 
 ```bash
 Accuracy: 0.951
-Invalid: 0.000
 Latency: 77.397 s
 Output throughput: 1809.790 token/s
 ```
@@ -363,20 +284,22 @@ python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-V3 --tp 8 --trust-r
 python3 benchmark/gsm8k/bench_sglang.py --num-shots 8 --num-questions 1319 --parallel 1319
 ```
 
-![flashpng](imgs/flashinfer_mla.png)
+```bash
+Accuracy: 0.948
+Latency: 71.480 s
+Output throughput: 1920.021 token/s
+```
+
 
 #### **Results:**
+
+![flashpng](imgs/flashinfer_mla.png)
 
 Due to FlashInfer fused operation, we obtain less latency and more output throughput for a nearly similar accuracy.
 
 ## FP8
 
 ### Improve the accuracy for FP8
-
-<span style="color:red">Is this a Deepseek thing, or something done also in FlashAttention?
-</span>
-
-<span style="color:green">Yes, its a DeepSeek optimization. FlashAttention as we know doesnt need the quantization step</span>
 
 #### **Context:**
 
@@ -395,11 +318,11 @@ The FP8 GEMM accumulation on NVIDIA H800 Tensor Cores is limited to about `14 bi
 python3 -m sglang.launch_server --model deepseek-ai/DeepSeek-R1 --tp 8 --trust-remote-code
 python3 benchmark/gsm8k/bench_sglang.py --num-shots 8 --num-questions 1319 --parallel 1319
 ```
-![fig6.png](imgs/fp8_vs_bf16.png)
-
 #### **Results:**
 
-More output throughput, less latency, for same accuracy (0.955 v 0.957 on gsm8k).
+![fig6.png](imgs/fp8_vs_bf16.png)
+
+More output throughput, less latency, for same accuracy (`0.955s` vs `0.957s` on gsm8k).
 
 ### Tunning FP8 GEMM
 
@@ -483,18 +406,9 @@ Example of the optimal configuration for the kernel: `N=512,K=7168,device_name=N
 }
 ```
 
-<span style="color:red">Some text here explaining the result would be good? Like what are the implications.
-</span>
-
 For all batch sizes to be tuned and a given FP8 dtype, the script test and compare different model weights dimensions (N and K) to optimize FP8 GEMM block-wise quantization based on lowest latency. Obtaining the most optimal configuration per batch size for the block tiling dimension(`BLOCK_SIZE_M/N/K`), the group size (`GROUP_SIZE_M`) for then number of tiles grouped together improving the L2 cache usage, number of warps (`num_warps`) per thread block (i.e., per tile) and number of stages (`num_stages`) for block loading into shared memory as a prefetching. This enable an autotunning of the compute parameters for diferent configurations.
 
 ### FP8 GEMM CUTLASS implementation
-<span style="color:red">Why are we comparing to vLLM here unless this is the non-fused kernel, then we need to state that?
-The tite of the blog is about deepseek v3 optimizations and this isnt part of it so raises the question is it relevant.
-</span>
-
-<span style="color:green">They reasons are: they use vLLM as baseline for all their experimentation (coherent with sglang standars), as the first took what vLLM did and improve upon it (a quantitative way of measuring SoTA implementations, as they only really compete with vLLM).  Is true that this is not a direct deepseek optimization, but it has to do with it because of the use of FP8 quantization and being listed as a Deepseekv3 Optimization in their issue.</span>
-
 
 #### Context:
 
@@ -508,8 +422,9 @@ The quantization operation can be fused into the FP8 matmul operation for effici
 ```bash
 root@cluster-h200-02-f2:/sgl-workspace/sglang/sgl-kernel/benchmark# python3 bench_int8_gemm.py 
 ```
-![fig6.png](imgs/int8_gemm_comparison.png)
 #### **Results:**
+
+![fig6.png](imgs/int8_gemm_comparison.png)
 
 
 Benchmarks measure GB/s per batch size (another measure of throughput). Comparing vllm same kernel (int8 gemm) to sglang kernel we get more throughput for different batch sizes for different configurations (N and K).
@@ -519,9 +434,6 @@ Benchmarks measure GB/s per batch size (another measure of throughput). Comparin
 ## MoE
 
 ### FusedMoE tuning for H200
-
-<span style="color:red">Again Some text here explaining the result would be good? Like what are the implications how is it used in SGLang?
-</span>
 
 Implements the fused computation for a Mixture of Experts (MOE) using token and expert matrices.
 Multiplies `A @ B` (token × expert matmul) using top-k routing.
@@ -622,7 +534,7 @@ We perform the tunning for the fused MoE kernel for Deepseekv3 with FP8 quantiza
 
 We then compare the latency for the fused MoE kernel implementation of SGLang with the baseline implementation from vLLM obtaining a more refined version with almost costant latency when incrementing the batch size.
 
-![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/fused-moe-performance.png)
+![](/Users/rog0d/Desktop/blogs/deepseek/sglang_optimizations/imgs/fused_moe_latency_comparison.png)
 
 ## References
 

@@ -5,13 +5,15 @@ import pandas as pd
 
 # Configuration - Set to True for plots you want to generate
 CONFIG = {
-    "cuda_graph_benchmark": True,
-    "fp8_latency_comparison": True,
-    "speculative_serving": True,
-    "dp_attention": True,
-    "flashinfer_mla": True,
-    "fp8_vs_bf16": True,
-    "int8_gemm": True
+    "cuda_graph_benchmark": False,
+    "fp8_latency_comparison": False,
+    "speculative_serving": False,
+    "dp_attention": False,
+    "overlap_scheduler": True,
+    "flashinfer_mla": False,
+    "fp8_vs_bf16": False,
+    "int8_gemm": False,
+    "fused_moe_latency": True
 }
 
 # Create images directory if it doesn't exist
@@ -206,7 +208,62 @@ if CONFIG["dp_attention"]:
     plt.tight_layout()
     save_figure(fig, "dp_attention")
 
-# Plot 5: FlashInfer MLA
+# Plot 5: Overlap scheduler with DP
+if CONFIG['overlap_scheduler']:
+    # Labels
+    benchmarks = ["Standard", "Overlap-scheduler"]
+
+    # Data
+    times = ["Mean E2E", "Mean TTFT", "Mean TPOT", "Mean ITL"]
+    standard_latency = [1080152.26, 724050.93, 348.10, 350.62]
+    overlap_latency = [1066166.84, 864850.92, 196.79, 197.96]
+
+    x = np.arange(len(times))
+    width = 0.35
+
+    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=(12, 8), 
+                                            gridspec_kw={'height_ratios': [1, 2]},
+                                            sharex=True)
+
+    # Top axis (large bar only)
+    ax_top.bar(x - width/2, standard_latency, width, label='Standard Latency', color='steelblue')
+    ax_top.bar(x + width/2, overlap_latency, width, label='Overlap Scheduler Latency', color='darkorange')
+
+    # Bottom axis (zoomed in smaller bars)
+    ax_bottom.bar(x - width/2, standard_latency, width, color='steelblue')
+    ax_bottom.bar(x + width/2, overlap_latency, width, color='darkorange')
+
+    # Set axis limits to break after the first bar
+    ax_top.set_ylim(500000, 1100000)       # Shows the large bar clearly
+    ax_bottom.set_ylim(0, 400)       # Shows smaller bars clearly
+
+    # Hide spines between the two axes
+    ax_top.spines.bottom.set_visible(False)
+    ax_bottom.spines.top.set_visible(False)
+
+    # Diagonal lines to indicate broken axis
+    d = .005
+    kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False)
+    ax_top.plot((-d, +d), (-d, +d), **kwargs)
+    ax_top.plot((1 - d, 1 + d), (-d, +d), **kwargs)
+
+    kwargs.update(transform=ax_bottom.transAxes)
+    ax_bottom.plot((-d, +d), (1 - d, 1 + d), **kwargs)
+    ax_bottom.plot((1 - d, 1 + d), (1 - d, 1 + d), **kwargs)
+
+    # Labels, titles, ticks
+    ax_bottom.set_xticks(x)
+    ax_bottom.set_xticklabels(times, rotation=30, ha='right')
+
+    ax_top.set_title("Standard vs Overlap Scheduler mean latencies with Broken Y-axis")
+    ax_bottom.set_ylabel("Latency (s)")
+
+    ax_top.legend()
+
+    plt.tight_layout()
+    save_figure(fig, "ovelap_scheduler_latency")
+
+# Plot 6: FlashInfer MLA
 if CONFIG["flashinfer_mla"]:
     # Labels
     benchmarks = ['Standard', 'FlashInfer-MLA']
@@ -248,7 +305,7 @@ if CONFIG["flashinfer_mla"]:
     plt.tight_layout()
     save_figure(fig, "flashinfer_mla")
 
-# Plot 6: FP8 vs BF16
+# Plot 7: FP8 vs BF16
 if CONFIG["fp8_vs_bf16"]:
     # New benchmark labels
     benchmarks = ['Baseline BF16', 'Current FP8']
@@ -290,7 +347,7 @@ if CONFIG["fp8_vs_bf16"]:
     plt.tight_layout()
     save_figure(fig, "fp8_vs_bf16")
 
-# Plot 7: INT8 GEMM
+# Plot 8: INT8 GEMM
 if CONFIG["int8_gemm"]:
     # Organizing the data
     data = {
@@ -343,5 +400,27 @@ if CONFIG["int8_gemm"]:
 
     plt.tight_layout()
     save_figure(fig, "int8_gemm_comparison")
+
+# Plot 9: Fused MoE Latency (vLLM vs SGLang)
+if CONFIG["fused_moe_latency"]:
+    fused_moe_df = pd.read_csv("fused-moe-performance.csv")
+
+    # Plotting
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    ax.plot(fused_moe_df["batch_size"], fused_moe_df["vllm_fused_moe_triton"],
+            label="vLLM Fused MoE (Triton)", color="steelblue", linewidth=4)
+    ax.plot(fused_moe_df["batch_size"], fused_moe_df["sglang_fused_moe_triton"],
+            label="SGLang Fused MoE (Triton)", color="darkorange", linewidth=4)
+
+    ax.set_title("Fused MoE Latency: vLLM vs SGLang (Triton Kernels)")
+    ax.set_xlabel("Batch Size")
+    ax.set_ylabel("Latency (s)")
+    ax.grid(True)
+    ax.legend()
+
+    plt.tight_layout()
+    save_figure(fig, "fused_moe_latency_comparison")
+
 
 print("Plots generated and saved to the 'imgs' directory.")
