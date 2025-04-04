@@ -1,7 +1,7 @@
 
 # DeepSeek V3 SGLang Optimizations
 
-Continuing our technical series on DeepSeek V3 integration with SGLang, we aim to give a comprehensive overview of the various optimization strategies available for enhancing performance and efficiency. As an inference serving engine, SGLang interacts with multiple components of the ML infrastructure stack, providing opportunities for optimization at different levels. Most of the optimizations come in the form of flags for the `launch_server` CLI. These flags provide a convenient entry point into understanding the various performance enhancements that have been implemented over time in the SGLang ecosystem.
+Continuing our technical series on DeepSeek V3 integration with SGLang, we aim to give a comprehensive overview of the various optimization strategies available for enhancing performance and efficiency. The ultimate goal is to achieve competitive inference performance based on native optimizations for the DeepSeek V3 model family (Including R1) at the same time we aim to generate expertise in frontier improvements of LLMs. As an inference serving engine, SGLang interacts with multiple components of the ML infrastructure stack, providing opportunities for optimization at different levels. Most of the optimizations come in the form of flags for the `launch_server` CLI. These flags provide a convenient entry point into understanding the various performance enhancements that have been implemented over time in the SGLang ecosystem.
 
 ## Summary table of optimizations
 
@@ -535,6 +535,14 @@ We perform the tunning for the fused MoE kernel for DeepSeek-V3 with FP8 quantiz
 We then compare the latency for the fused MoE kernel implementation of SGLang with the baseline implementation from vLLM, obtaining a more refined version with almost constant latency when incrementing the batch size.
 
 ![fig7](imgs/fused_moe_latency_comparison.png)
+
+As closing notes, the versions used for this technical blog is sglang: v0.4.3.post2, sgl-kernel: 0.0.3.post6, torch: 2.5.1 and CUDA: 12.5. 
+
+We strongly support the collaboration on sglang, which serves as the de facto open-source inference engine for the DeepSeek family of models. 
+
+Future work plans to further explore these optimizations by analyzing the performance and incremental improvements of key components such as the FlashMLA kernel, FlashAttention, and the sglang Triton kernels. We also propose exploring new optimizations implemented by the sglang team, such as the splitting of the prefill and decode phases and the integration of DeepGemm for FusedMoE.
+
+Thanks to the sglang team for their help, review of this blog, and their joint collaboration on the project.
 
 ## References
 
