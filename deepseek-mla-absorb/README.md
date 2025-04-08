@@ -2,6 +2,8 @@
 
 This repository contains code for benchmarking different MLA implementations. The code accompanies the blog post: [MLA (Multi-Latent Attention)](./deepseek-mla-absorb.md)
 
+[Blog post on datacrunch.io](https://datacrunch.io/blog/deepseek-sglang-multi-head-latent-attention)
+
 The core benchmarking code was taken from [here](https://github.com/madsys-dev/deepseekv2-profile/tree/924174cb5dc11fad24bdaad3fd820ebf87506368) but we simplified the model classes.
 
 ## Overview
