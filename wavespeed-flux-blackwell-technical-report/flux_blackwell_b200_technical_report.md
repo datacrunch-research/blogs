@@ -61,9 +61,9 @@ WaveSpeedAI addresses these bottlenecks with a proprietary framework purpose-bui
 - **Optimized memory planning and preallocation**
 - **Latency-first scheduling mechanisms** that prioritize speed over batching depth
 
-Xelerate follows an HW-SW co-design, fully utilizing the B200 GPU’s compute and memory capacity. It represents a significant leap forward in AI model serving, allowing us to deliver ultra-low latency and high-efficiency inference at the production scale.
+Our inference engine follows an HW-SW co-design, fully utilizing the B200 GPU’s compute and memory capacity. It represents a significant leap forward in AI model serving, allowing us to deliver ultra-low latency and high-efficiency inference at the production scale.
 
-We decompose the problem of efficient AI inference into multiple dimensions, like quantization, kernel optimizations, distributed inference (see [ParaAttention](https://github.com/chengzeyi/ParaAttention)) and algorithmic efficiency using DiT caching, some images require fewer denoising steps to attain a reasonable quality than others (e.g. [AdaCache](https://arxiv.org/html/2411.02397v1)). We evaluate how these optimizations impact output quality, prioritizing lossless vs loosely optimizations. **That is, we don’t apply optimization that could significantly reduce model capabilities or completely collapse visible output quality, like text rendering and scene semantics.**
+We decompose the problem of efficient AI inference into multiple dimensions, like quantization, compiler level with kernel optimizations, distributed inference (see [ParaAttention](https://github.com/chengzeyi/ParaAttention)) and algorithmic efficiency using DiT caching, some images require fewer denoising steps to attain a reasonable quality than others (e.g. [AdaCache](https://arxiv.org/html/2411.02397v1)). We evaluate how these optimizations impact output quality, prioritizing lossless vs loosely optimizations. **That is, we don’t apply optimization that could significantly reduce model capabilities or completely collapse visible output quality, like text rendering and scene semantics.**
 
 # Benchmark: WaveSpeedAI on B200 vs. H100 Baseline
 
@@ -89,7 +89,7 @@ This enables responsive, creative tools, scalable content platforms, and sustain
 
 # Conclusion and Next Steps
 
-The FLUX-dev using B200 deployment demonstrates what’s possible when world-class hardware meets best-in-class software. We are pushing the frontiers of inference speed and efficiency at WaveSpeedAI, founded by Zeyi Cheng — creator of stable-fast, ParaAttention, and our in-house inference engine Xelerate. In the next releases we will focus on efficient video generation inference, and how to achieve close to real time inference. Our partnership with DataCrunch represents an opportunity to access cutting-edge GPUs like B200 and the upcoming [NVIDIA GB200 NVL72](https://www.nvidia.com/en-us/data-center/gb200-nvl72/) ([DataCrunch pre-order NVL72 GB200 clusters](https://datacrunch.io)) while co-developing a critical inference infrastructure stack.
+The FLUX-dev using B200 deployment demonstrates what’s possible when world-class hardware meets best-in-class software. We are pushing the frontiers of inference speed and efficiency at WaveSpeedAI, founded by Zeyi Cheng — creator of stable-fast, ParaAttention, and our in-house inference engine. In the next releases we will focus on efficient video generation inference, and how to achieve close to real time inference. Our partnership with DataCrunch represents an opportunity to access cutting-edge GPUs like B200 and the upcoming [NVIDIA GB200 NVL72](https://www.nvidia.com/en-us/data-center/gb200-nvl72/) ([DataCrunch pre-order NVL72 GB200 clusters](https://datacrunch.io)) while co-developing a critical inference infrastructure stack.
 
 **Get Started Today:**
 
