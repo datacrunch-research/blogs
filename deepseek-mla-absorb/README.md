@@ -1,7 +1,6 @@
-# MLA absorption trick
+# DeepSeek MLA Absorb
 
-
-This repository contains code for benchmarking different MLA implementations. The code accompanies the blog post: [Something](https://something).
+This repository contains code for benchmarking different MLA implementations. The code accompanies the blog post: [MLA (Multi-Level Attention)](./deepseek-mla-absorb.md)
 
 The core benchmarking code was taken from [here](https://github.com/madsys-dev/deepseekv2-profile/tree/924174cb5dc11fad24bdaad3fd820ebf87506368) but we simplified the model classes.
 
