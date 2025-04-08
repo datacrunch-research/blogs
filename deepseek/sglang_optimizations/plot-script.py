@@ -5,19 +5,53 @@ import pandas as pd
 
 # Configuration - Set to True for plots you want to generate
 CONFIG = {
-    "cuda_graph_benchmark": False,
-    "fp8_latency_comparison": False,
-    "speculative_serving": False,
-    "dp_attention": False,
+    "cuda_graph_benchmark": True,
+    "fp8_latency_comparison": True,
+    "speculative_serving": True,
+    "dp_attention": True,
     "overlap_scheduler": True,
-    "flashinfer_mla": False,
-    "fp8_vs_bf16": False,
-    "int8_gemm": False,
+    "flashinfer_mla": True,
+    "fp8_vs_bf16": True,
+    "int8_gemm": True,
     "fused_moe_latency": True
 }
 
-# Create images directory if it doesn't exist
-os.makedirs("images", exist_ok=True)
+# Create imgs directory if it doesn't exist
+os.makedirs("imgs", exist_ok=True)
+
+# Brand colors 2025
+BRAND_COLORS = {
+    "primary_main": "#4B7A8A",
+    "primary_dark": "#245866",
+    "primary_light": "#7FB1C3",
+    "info_main": "#0FB4E0",
+    "info_dark": "#0B8AAC",
+    "info_light": "#9BE4F8",
+    "success_main": "#13B91A",
+    "success_dark": "#009906",
+    "success_light": "#ADE6AF",
+    "warning_main": "#EB8C00",
+    "warning_dark": "#CC7700",
+    "warning_light": "#FFD494",
+    "error_main": "#FF4B1A",
+    "error_dark": "#D1350A",
+    "error_light": "#FFC3B3",
+    "grey_500": "#909090",
+    "grey_700": "#585858",
+    "grey_900": "#353535",
+}
+
+# Set style for all plots
+plt.rcParams['axes.prop_cycle'] = plt.cycler(color=[
+    BRAND_COLORS["primary_main"], 
+    BRAND_COLORS["info_main"],
+    BRAND_COLORS["success_main"],
+    BRAND_COLORS["warning_main"],
+    BRAND_COLORS["error_main"],
+    BRAND_COLORS["primary_dark"],
+    BRAND_COLORS["info_dark"],
+    BRAND_COLORS["success_dark"],
+])
 
 # Function to save figures
 def save_figure(fig, filename):
@@ -43,15 +77,15 @@ if CONFIG["cuda_graph_benchmark"]:
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
     # Latency bars (left y-axis)
-    bar1 = ax1.bar(x - width/2, total_latency, width, color='steelblue', label='Total Latency')
-    ax1.set_ylabel('Latency (s)', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
+    bar1 = ax1.bar(x - width/2, total_latency, width, color=BRAND_COLORS["primary_main"], label='Total Latency')
+    ax1.set_ylabel('Latency (s)', color=BRAND_COLORS["primary_main"])
+    ax1.tick_params(axis='y', labelcolor=BRAND_COLORS["primary_main"])
 
     # Throughput bars (right y-axis)
     ax2 = ax1.twinx()
-    bar2 = ax2.bar(x + width/2, total_throughput, width, color='darkorange', label='Total Throughput')
-    ax2.set_ylabel('Throughput (tokens/sec)', color='darkorange')
-    ax2.tick_params(axis='y', labelcolor='darkorange')
+    bar2 = ax2.bar(x + width/2, total_throughput, width, color=BRAND_COLORS["info_main"], label='Total Throughput')
+    ax2.set_ylabel('Throughput (tokens/sec)', color=BRAND_COLORS["info_main"])
+    ax2.tick_params(axis='y', labelcolor=BRAND_COLORS["info_main"])
 
     # X-axis labels
     ax1.set_xticks(x)
@@ -90,12 +124,12 @@ if CONFIG["fp8_latency_comparison"]:
                                             sharex=True)
 
     # Top axis (large bar only)
-    ax_top.bar(x - width/2, bf16_latencies, width, label='BF16 Latency', color='steelblue')
-    ax_top.bar(x + width/2, fp8_latencies, width, label='FP8 Latency', color='darkorange')
+    ax_top.bar(x - width/2, bf16_latencies, width, label='BF16 Latency', color=BRAND_COLORS["primary_main"])
+    ax_top.bar(x + width/2, fp8_latencies, width, label='FP8 Latency', color=BRAND_COLORS["info_main"])
 
     # Bottom axis (zoomed in smaller bars)
-    ax_bottom.bar(x - width/2, bf16_latencies, width, color='steelblue')
-    ax_bottom.bar(x + width/2, fp8_latencies, width, color='darkorange')
+    ax_bottom.bar(x - width/2, bf16_latencies, width, color=BRAND_COLORS["primary_main"])
+    ax_bottom.bar(x + width/2, fp8_latencies, width, color=BRAND_COLORS["info_main"])
 
     # Set axis limits to break after the first bar
     ax_top.set_ylim(0.02, 0.065)       # Shows the large bar clearly
@@ -142,15 +176,15 @@ if CONFIG["speculative_serving"]:
     fig, ax1 = plt.subplots(figsize=(10, 6))
 
     # Plot latency (left Y-axis)
-    bars1 = ax1.bar(x - width/2, latency_ms, width, label='E2E Latency (ms)', color='steelblue')
-    ax1.set_ylabel('Latency (ms)', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
+    bars1 = ax1.bar(x - width/2, latency_ms, width, label='E2E Latency (ms)', color=BRAND_COLORS["primary_main"])
+    ax1.set_ylabel('Latency (ms)', color=BRAND_COLORS["primary_main"])
+    ax1.tick_params(axis='y', labelcolor=BRAND_COLORS["primary_main"])
 
     # Plot throughput (right Y-axis)
     ax2 = ax1.twinx()
-    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Token Throughput (tok/s)', color='darkorange')
-    ax2.set_ylabel('Throughput (tokens/sec)', color='darkorange')
-    ax2.tick_params(axis='y', labelcolor='darkorange')
+    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Token Throughput (tok/s)', color=BRAND_COLORS["info_main"])
+    ax2.set_ylabel('Throughput (tokens/sec)', color=BRAND_COLORS["info_main"])
+    ax2.tick_params(axis='y', labelcolor=BRAND_COLORS["info_main"])
 
     # X-axis labels
     ax1.set_xticks(x)
@@ -185,15 +219,15 @@ if CONFIG["dp_attention"]:
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
     # Left Y-axis: Latency
-    bars1 = ax1.bar(x - width/2, latency_ms, width, label='E2E Latency (ms)', color='steelblue')
-    ax1.set_ylabel('Latency (ms)', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
+    bars1 = ax1.bar(x - width/2, latency_ms, width, label='E2E Latency (ms)', color=BRAND_COLORS["primary_main"])
+    ax1.set_ylabel('Latency (ms)', color=BRAND_COLORS["primary_main"])
+    ax1.tick_params(axis='y', labelcolor=BRAND_COLORS["primary_main"])
 
     # Right Y-axis: Throughput
     ax2 = ax1.twinx()
-    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Token Throughput (tok/s)', color='darkorange')
-    ax2.set_ylabel('Throughput (tokens/sec)', color='darkorange')
-    ax2.tick_params(axis='y', labelcolor='darkorange')
+    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Token Throughput (tok/s)', color=BRAND_COLORS["info_main"])
+    ax2.set_ylabel('Throughput (tokens/sec)', color=BRAND_COLORS["info_main"])
+    ax2.tick_params(axis='y', labelcolor=BRAND_COLORS["info_main"])
 
     # X-axis labels
     ax1.set_xticks(x)
@@ -226,12 +260,12 @@ if CONFIG['overlap_scheduler']:
                                             sharex=True)
 
     # Top axis (large bar only)
-    ax_top.bar(x - width/2, standard_latency, width, label='Standard Latency', color='steelblue')
-    ax_top.bar(x + width/2, overlap_latency, width, label='Overlap Scheduler Latency', color='darkorange')
+    ax_top.bar(x - width/2, standard_latency, width, label='Standard Latency', color=BRAND_COLORS["primary_main"])
+    ax_top.bar(x + width/2, overlap_latency, width, label='Overlap Scheduler Latency', color=BRAND_COLORS["info_main"])
 
     # Bottom axis (zoomed in smaller bars)
-    ax_bottom.bar(x - width/2, standard_latency, width, color='steelblue')
-    ax_bottom.bar(x + width/2, overlap_latency, width, color='darkorange')
+    ax_bottom.bar(x - width/2, standard_latency, width, color=BRAND_COLORS["primary_main"])
+    ax_bottom.bar(x + width/2, overlap_latency, width, color=BRAND_COLORS["info_main"])
 
     # Set axis limits to break after the first bar
     ax_top.set_ylim(500000, 1100000)       # Shows the large bar clearly
@@ -278,15 +312,15 @@ if CONFIG["flashinfer_mla"]:
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
     # Latency (left axis)
-    bars1 = ax1.bar(x - width/2, latency_sec, width, label='Latency (s)', color='steelblue')
-    ax1.set_ylabel('Latency (seconds)', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
+    bars1 = ax1.bar(x - width/2, latency_sec, width, label='Latency (s)', color=BRAND_COLORS["primary_main"])
+    ax1.set_ylabel('Latency (seconds)', color=BRAND_COLORS["primary_main"])
+    ax1.tick_params(axis='y', labelcolor=BRAND_COLORS["primary_main"])
 
     # Throughput (right axis)
     ax2 = ax1.twinx()
-    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Throughput (tok/s)', color='darkorange')
-    ax2.set_ylabel('Output Throughput (tokens/sec)', color='darkorange')
-    ax2.tick_params(axis='y', labelcolor='darkorange')
+    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Throughput (tok/s)', color=BRAND_COLORS["info_main"])
+    ax2.set_ylabel('Output Throughput (tokens/sec)', color=BRAND_COLORS["info_main"])
+    ax2.tick_params(axis='y', labelcolor=BRAND_COLORS["info_main"])
 
     # X-axis and title
     ax1.set_xticks(x)
@@ -320,15 +354,15 @@ if CONFIG["fp8_vs_bf16"]:
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
     # Latency (left axis)
-    bars1 = ax1.bar(x - width/2, latency_sec, width, label='Latency (s)', color='steelblue')
-    ax1.set_ylabel('Latency (seconds)', color='steelblue')
-    ax1.tick_params(axis='y', labelcolor='steelblue')
+    bars1 = ax1.bar(x - width/2, latency_sec, width, label='Latency (s)', color=BRAND_COLORS["primary_main"])
+    ax1.set_ylabel('Latency (seconds)', color=BRAND_COLORS["primary_main"])
+    ax1.tick_params(axis='y', labelcolor=BRAND_COLORS["primary_main"])
 
     # Throughput (right axis)
     ax2 = ax1.twinx()
-    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Throughput (tok/s)', color='darkorange')
-    ax2.set_ylabel('Output Throughput (tokens/sec)', color='darkorange')
-    ax2.tick_params(axis='y', labelcolor='darkorange')
+    bars2 = ax2.bar(x + width/2, throughput_tokps, width, label='Throughput (tok/s)', color=BRAND_COLORS["info_main"])
+    ax2.set_ylabel('Output Throughput (tokens/sec)', color=BRAND_COLORS["info_main"])
+    ax2.tick_params(axis='y', labelcolor=BRAND_COLORS["info_main"])
 
     # X-axis and title
     ax1.set_xticks(x)
@@ -390,8 +424,8 @@ if CONFIG["int8_gemm"]:
 
     for ax, shape in zip(axes, shapes_to_plot):
         subset = df[df["Shape"] == shape]
-        ax.plot(subset["Batch Size"], subset["vLLM Int8 GEMM (GB/s)"], marker='o', label="vLLM")
-        ax.plot(subset["Batch Size"], subset["SGL-Kernel Int8 GEMM (GB/s)"], marker='s', label="SGL-Kernel")
+        ax.plot(subset["Batch Size"], subset["vLLM Int8 GEMM (GB/s)"], marker='o', label="vLLM", color=BRAND_COLORS["primary_main"], linewidth=2)
+        ax.plot(subset["Batch Size"], subset["SGL-Kernel Int8 GEMM (GB/s)"], marker='s', label="SGL-Kernel", color=BRAND_COLORS["info_main"], linewidth=2)
         ax.set_title(f"INT8 GEMM Throughput - {shape}")
         ax.set_xlabel("Batch Size")
         ax.set_ylabel("Throughput (GB/s)")
@@ -409,9 +443,9 @@ if CONFIG["fused_moe_latency"]:
     fig, ax = plt.subplots(figsize=(12, 6))
 
     ax.plot(fused_moe_df["batch_size"], fused_moe_df["vllm_fused_moe_triton"],
-            label="vLLM Fused MoE (Triton)", color="steelblue", linewidth=4)
+            label="vLLM Fused MoE (Triton)", color=BRAND_COLORS["primary_main"], linewidth=4)
     ax.plot(fused_moe_df["batch_size"], fused_moe_df["sglang_fused_moe_triton"],
-            label="SGLang Fused MoE (Triton)", color="darkorange", linewidth=4)
+            label="SGLang Fused MoE (Triton)", color=BRAND_COLORS["info_main"], linewidth=4)
 
     ax.set_title("Fused MoE Latency: vLLM vs SGLang (Triton Kernels)")
     ax.set_xlabel("Batch Size")
