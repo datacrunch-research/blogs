@@ -67,11 +67,11 @@ We decompose the problem of efficient AI inference into multiple dimensions, lik
 
 # Benchmark: WaveSpeedAI on B200 vs. H100 Baseline
 
-![img](/Users/antonio/Desktop/DataCrunch/blogs/wavespeed-flux-blackwell-technical-report/images/flux_benchmarking_b200_vs_h100_optimization_settings.png)
+![img](./images/flux_benchmarking_b200_vs_h100_optimization_settings.png)
 
 **Model outputs using different optimizations settings:**
 
-![img](/Users/antonio/Desktop/DataCrunch/blogs/wavespeed-flux-blackwell-technical-report/images/model_image_outputs.png)
+![img](./images/model_image_outputs.png)
 
 *Prompt: photograph of an alternative female with an orange bandana, light brown long hair, clear frame glasses, septum piecing, beige overalls hanging off one shoulder, a white tube top underneath, she is sitting in her apartment on a bohemian rug, in the style of a vogue magazine shoot*
 
