@@ -1,0 +1,86 @@
+Brand colors 2025:
+
+
+Black
+#1a1a1a
+White
+#fffff
+
+
+
+Grey 50
+#fafafa
+Grey 100
+#f5f5f5
+Grey 200
+#eeeeee
+Grey 300
+#dddddd
+Grey 400
+#b9b9b9
+Grey 500
+#909090
+Grey 600
+#707070
+Grey 700
+#585858
+Grey 800
+#454545
+Grey 900
+#353535
+
+
+Primary surface
+#f5f9f9
+Primary light
+#7FB1C3
+Primary main
+#4B7A8A
+Primary dark
+#245866
+
+
+Success surface
+#F3FBF4
+Success light
+#ADE6AF
+Success main
+#13B91A
+Success dark
+#009906
+
+
+
+
+Warning surface
+#FFF9F0
+Warning light
+#FFD494
+Warning main
+#EB8C00
+Warning dark
+#CC7700
+
+
+
+Error surface
+#FFF3F0
+Error light
+#FFC3B3
+Error main
+#FF4B1A
+Error dark
+#D1350A
+
+
+
+Info surface
+#F1FBFE
+Info light
+#9BE4F8
+Info main
+#0FB4E0
+Info dark
+#0B8AAC
+
+
