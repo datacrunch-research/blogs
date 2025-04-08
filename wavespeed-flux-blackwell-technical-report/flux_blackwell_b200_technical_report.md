@@ -79,8 +79,9 @@ We decompose the problem of efficient AI inference into multiple dimensions, lik
 
 The performance improvements translate into:
 
-- **Faster response times** for image generation APIs
-- **Lower cost per image** due to improved efficiency and reduced hardware utilization
+- **AI algorithm design** (e.g. DiT activation caching) and **system optimization**, using GPU architecture-tuned kernels, for better HW utilization.
+- **Reducing inference latency** leading to new possibilities (e.g. [Test-Time Compute in diffusion models](https://www.google.com/search?client=safari&rls=en&q=test+time+scaling+diffusion+models&ie=UTF-8&oe=UTF-8)).
+- **Lower cost per image** due to improved efficiency and reduced hardware utilisation.
 
 We have achieved **B200 equal H100 cost-performance ratio but half the generation latency**. Thus, the cost per generation doesn’t increase while now enabling new real-time possibilities without sacrificing model capabilities. Sometimes more isn’t more but different, and here we have achieved a new stage of performance, providing a new level of user experience in image generation using SOTA models.
 
