@@ -5,15 +5,15 @@ import pandas as pd
 
 # Configuration - Set to True for plots you want to generate
 CONFIG = {
-    "cuda_graph_benchmark": True,
-    "fp8_latency_comparison": True,
+    "cuda_graph_benchmark": False,
+    "fp8_latency_comparison": False,
     "speculative_serving": True,
-    "dp_attention": True,
-    "overlap_scheduler": True,
-    "flashinfer_mla": True,
-    "fp8_vs_bf16": True,
-    "int8_gemm": True,
-    "fused_moe_latency": True
+    "dp_attention": False,
+    "overlap_scheduler": False,
+    "flashinfer_mla": False,
+    "fp8_vs_bf16": False,
+    "int8_gemm": False,
+    "fused_moe_latency": False
 }
 
 # Create imgs directory if it doesn't exist
@@ -167,8 +167,8 @@ if CONFIG["speculative_serving"]:
     benchmarks = ['Standard\nServing', 'Speculative\nServing']
 
     # Metrics from logs
-    latency_ms = [4556.85, 746.72]            # End-to-End Latency (ms)
-    throughput_tokps = [63.18, 385.11]        # Total Token Throughput (tokens/sec)
+    latency_ms = [928.08, 772.47]            # End-to-End Latency (ms)
+    throughput_tokps = [302.40 , 369.90]        # Total Token Throughput (tokens/sec)
 
     x = np.arange(len(benchmarks))
     width = 0.4
