@@ -141,7 +141,7 @@ python3 -m sglang.bench_serving --backend sglang --dataset-name random --random-
 
 ![spec-bench](imgs/speculative_serving.png)
 
-We achieve an overall improvement of the general throughput (request, input, and output) and a significant (x6) reduction to the end-to-end latency.
+We achieve an overall improvement of the general throughput (request, input, and output) and a (x1.2) reduction to the end-to-end latency.
 
 ## MLA
 
