@@ -136,7 +136,7 @@ Putting this all together we get the following results:
 | DeepSeek V3 GQA equiv.    | 0.10  | 0.10               | 1.00                  | 4.85                          |
 | **DeepSeek V3 MLA** | 2.28   | 0.01               | 235                    |         990               |
 
-*Table 3: Attention Operator Table (`B=1`)*
+*Table 3: Attention Operator Table (`B=1`) with the intenesity calculation and theoretical TFLOPS*
 
 By redesigning the attention mechanism, MLA has fundamentally changed the nature of the attention kernel ([Table 3](#table3)). The number of floating point operations has increased approximately 4 times versus standard MHA and 22 times versus GQA. However, this trade-off is clearly intentional because MLA dramatically increases the arithmetic intensity of the kernel—over 200 times compared to traditional approaches. It is worth noting that at low sequence lengths `L<1394` the inensity will be below the ridge point and so memory bound but with still far greater intensity than the other decoding kernels. 
 
