@@ -3,9 +3,9 @@
 
 ## Introduction
 
-In a previous blog, we explained how an algebraic manipulation of the Multi-Head Latent Attention (MLA) formula results in a more efficient implementation, known as the 'weight absorption' trick. In the same post, we speculated that the low-rank projection used by the DeepSeek team is more expressive than the previous state-of-the-art Group Query Attention (GQA). For those that have not read it, go back and check it out [here](https://datacrunch.io/blog/deepseek-sglang-multi-head-latent-attention), as we will reuse definitions to save space.
+In a previous blog, we explained how an algebraic manipulation of the Multi-Head Latent Attention (MLA) formula results in a more efficient implementation, known as the 'weight absorption' trick. In the same post, we speculated that the low-rank projection used by the DeepSeek team is more expressive than the previous state-of-the-art Group Query Attention (GQA). For those who have not read it, check it out [here](https://datacrunch.io/blog/deepseek-sglang-multi-head-latent-attention), as we will reuse definitions to save space.
 
-In this blog, we want to examine the theoretical performance of the MLA kernel and the KV cache computation. The roofline model is a common way to analyze an algorithm; it plots intensity on the x-axis against performance on the y-axis. The concept is well covered in [1] ([All About Rooflines](https://jax-ml.github.io/scaling-book/roofline/)) and [2] ([Transformer Inference Arithmetic](https://kipp.ly/transformer-inference-arithmetic/)) understanding the intensity of a kernel helps to determine if it is memory bound or compute bound thus allowing one to determine what to focus optimizations on.
+In this blog, we want to examine the theoretical performance of the MLA kernel and the KV cache computation. The roofline model is a common way to analyze an algorithm; it plots intensity on the x-axis against performance on the y-axis. The concept is well covered in [1] ([All About Rooflines](https://jax-ml.github.io/scaling-book/roofline/)) and [2] ([Transformer Inference Arithmetic](https://kipp.ly/transformer-inference-arithmetic/)) understanding the intensity of a kernel helps to determine if it is memory bound or compute bound thus allowing one to decide what to focus optimizations on.
 
 An accelerator's memory bandwidth and peak computational FLOPs determine the Roofline model. A program (kernel) will be either memory-bound or compute-bound depending on the amount of data that must flow to the computational cores and the potential for data reuse. In [Figure 1](#figure1), the algorithm `A` is memory-bound, meaning the accelerator's cores spend significant time idle waiting for data. In contrast, algorithm `B` is compute-bound, where processing capacity rather than data access is the bottleneck. Both points fall below the performance boundary, indicating potential for optimization. However, both kernels will remain in their respective regimes. The plotted Ridge Point marks where operational intensity transitions from memory-bound to compute-bound regions and varies for each accelerator.
 
@@ -26,21 +26,21 @@ Let's first look at some of the key parameters of the DeepSeek V3 model which we
 <a id="table1"></a>
 | Model                     | $H$ (`kv_heads`) | $H_q$ (`q_heads`) | $K/C$ (`k_dim`) | $V/C_v$ (`v_dim`) | $D$ (`h_dim`)   | `n_layers` | $L$ (`seq_len`) | KV size | Total GB |
 |--------------------------|------------------|-------------------|------------------|-------------------|-----|------------|------------------|---------|----------|
-| Llama-13b                | 128              | 128               | 40               | 40                |   5120  | 40         | 8192             | 2       | 3.13     |
-| DeepSeek V3 MHA equivalent | 128            | 128               | 128              | 128               |   7168  | 61         | 8192             | 2       | 15.25    |
-| DeepSeek V3 GQA equivalent | 24             | 128               | 128              | 128               |  7168   | 61         | 8192             | 2       | 3.05     |
-| **DeepSeek V3 MLA**          | 1                | 128               | 576              | 512               |   7168  | 61         | 8192             | 1       | 0.29     |
+| Llama-13b                | 128              | 128               | 40               | 40                |   5120  | 40         | 8192             | 2       | 6.26     |
+| DeepSeek V3 MHA equivalent | 128            | 128               | 128              | 128               |   7168  | 61         | 8192             | 2       | 30.50    |
+| DeepSeek V3 GQA equivalent | 24             | 128               | 128              | 128               |  7168   | 61         | 8192             | 2       | 6.10     |
+| **DeepSeek V3 MLA**          | 1                | 128               | 576              | 512               |   7168  | 61         | 8192             | 1       | 0.51     |
 
 
 
 *Table 1: Total memory requirement for different model variants (`B=1`), showing MLA greatly reduces memory requirements.*
 
 
-[Table 1](#table1) presents the total memory requirements for the KV cache across all attention layers. All parameters are in FP8. For standard attention mechanisms, $K/C$ represents the key head dimension, while $V/C_v$ represents the value head dimension. For MLA, $V/C_v​=512$ is the dimension of the compressed vector stored in the KV cache per token (shape (`B, L, C_v`)). The $K/C=576$ represents the effective dimension used during key-side attention computations, achieved by combining the stored $C_v$ vector with RoPE embeddings (`512+64=576`). 
+[Table 1](#table1) presents the total memory requirements for the KV cache across all attention layers. All variables are in FP16. For standard attention mechanisms, $K/C$ represents the key head dimension, while $V/C_v$ represents the value head dimension. For MLA, $V/C_v​=512$ is the dimension of the compressed vector stored in the KV cache per token (shape (`B, L, C_v`)). The $K/C=576$ represents the effective dimension used during key-side attention computations, achieved by combining the stored $C_v$ vector with RoPE embeddings (`512+64=576`). 
  
 For comparison, we've included memory requirements for equivalent models using 5-to-1 grouping GQA (Grouped Query Attention), standard MHA (Multi-Head Attention), and a small Llama model with MHA. The KV size column represents the two variables for keys and values, whereas there is only one equivalent in MLA.  
 
-The KV cache's memory storage requirements for DeepSeek V3's MLA are dramatically reduced—approximately **55 times less** than the MHA equivalent and **11 times less** than the GQA equivalent implementation. This means that MLA can run longer sequences without running into out-of-memory errors.
+The KV cache's memory storage requirements for DeepSeek V3's MLA are dramatically reduced—approximately **60 times less** than the MHA equivalent and **12 times less** than the GQA equivalent implementation. This means that MLA can run longer sequences without running into out-of-memory errors.
 
 ### Computing KV cache
 
@@ -64,16 +64,16 @@ $$\text{FLOPs} =  4 \cdot n_{\text{layers}} \cdot B \cdot D \cdot(H \cdot K).$$
 
 Memory access (bytes):
 
-$$\text{Total bytes} = n_{\text{layers}} \cdot (B \cdot D + 2\cdot D \cdot(H \cdot K) + B \cdot 2\cdot (H \cdot K)). $$
+$$\text{Total bytes} = n_{\text{layers}} \cdot 2 \cdot (B \cdot D + 2\cdot D \cdot(H \cdot K) + B \cdot 2\cdot (H \cdot K)). $$
 Note that in the memory access calculation we have also included the writing of the output back to HBM. Using these formulas we can now calculate the floating point operations and memory bandwidth used as well as the intensity:
 
 
 | Model                     | GFLOPs | Memory Bandwidth GB | Intensity (FLOPs/Byte) |
 |--------------------------|--------|----------------------|-----------|
-| Llama-13b                | 4.19   | 2.10                 | 2.00      |
-| DeepSeek V3 MHA equiv.   | 28.65   | 14.33                 | 2.00      |
-| DeepSeek V3 GQA equiv.   | 5.37    | 2.69                 | 2.00      |
-| **DeepSeek V3 MLA**          | 0.5    | 0.25                 | 2.00      |
+| Llama-13b                | 4.19   | 4.20                 | 1.00      |
+| DeepSeek V3 MHA equiv.   | 28.65   | 28.66                 | 1.00      |
+| DeepSeek V3 GQA equiv.   | 5.37    | 5.37                 | 1.00      |
+| **DeepSeek V3 MLA**          | 0.50    | 0.50                 | 1.00      |
 
 *Table 2: KV calculations (`B=1`) showing much reduced memory and bandwidth for MLA, although similar intensity.*
 
@@ -95,7 +95,7 @@ $$\text{FLOPs}_\text{MHA} = H \cdot B \cdot (2 \cdot L \cdot K + 2 \cdot L \cdot
 
 The memory access involves reading the query vector, reading the K and V caches, and writing the output vector. The total memory access (bytes) across all layers is:
 
-$$\text{Bytes}_\text{MHA} = H \cdot B \cdot (K + 2 \cdot L \cdot K + K) = 2 \cdot B \cdot H \cdot K \cdot (1 + L)$$
+$$\text{Bytes}_\text{MHA} = 2 \cdot H \cdot B \cdot (K + 2 \cdot L \cdot K + K) = 4 \cdot B \cdot H \cdot K \cdot (1 + L)$$
 
 
 -----
@@ -116,32 +116,32 @@ $$\text{FLOPs}_{\text{MLA-Attention}} = 2 \cdot B \cdot L \cdot H_q \cdot (C + C
 
 The memory requirements can be broken down to `Bytes = (Read KV + Read Q + Write O)` so:
 
-$$\text{Bytes}_{\text{MLA-Attention}} = B \cdot L \cdot C + B \cdot H_q \cdot C + B  \cdot H_q \cdot C_v $$
+$$\text{Bytes}_{\text{MLA-Attention}} = 2 (\cdot B \cdot L \cdot C + B \cdot H_q \cdot C + B  \cdot H_q \cdot C_v) $$
 
 
-To compute a roofline model we need to assume a GPU architecture so we will use a H200. Therefore from the [Nvidia H200 Datasheet](https://www.nvidia.com/en-gb/data-center/h200/) we can calculate the arithmetic intensity of the accelerator:
+To compute a roofline model we need to assume a GPU architecture so we will use a H200. Therefore from the [Nvidia H200 Datasheet](https://www.nvidia.com/en-gb/data-center/h200/) [3] we can calculate the arithmetic intensity of the accelerator, using the peak **dense FP16** performance:
 
-$$\text{Intensity(H200)} = \frac{\text{Peak FLOPs/s}}{\text{Memory Bandwidth}} = \frac{1.979 \times 10^{15} \text{ FLOPs/s}}{4.8 \times 10^{12} \text{ bytes/s}} = 412.3 \text{ FLOPs/byte}.$$
+$$\text{Intensity(H200)} = \frac{\text{Peak FP16 FLOPs/s}}{\text{Memory Bandwidth}} = \frac{0.990 \times 10^{15} \text{ FLOPs/s}}{4.8 \times 10^{12} \text{ bytes/s}} \approx \mathbf{206.3} \text{ FLOPs/byte}.$$
 
-This level then becomes the ridge point that is shown in [Figure 1](#figure1). With this information we can also compute the theoretical FLOPS (Floating-point Operations Per Second) performance as:
+This level ($I_{ridge} \approx 206.3$ FLOPs/byte) then becomes the **ridge point** that is shown in [Figure 1](#figure1). With this information we can also compute the theoretical FLOPS (Floating-point Operations Per Second) performance as:
 
-$$\text{Achievable Performance (FLOPS) = min(Peak Compute FLOPS, Intensity} \cdot \text{Memory Bandwidth)}.$$
+$$\text{Achievable Performance (FLOPS) = min(Peak Compute FLOPS (FP16), Intensity} \cdot \text{Memory Bandwidth)}.$$
 
 Putting this all together we get the following results:
 
 
 | Model                     | GFLOPs | Memory Bandwidth GB | Intensity (FLOPs/Byte) | Theoretical TFLOPS  |
 | :------------------------ | :----- | :------------------ | :--------------------- | :---------------------------- |
-| Llama-13b                 | 0.168  | 0.084               | 1.95                   | 9.36                          |
-| DeepSeek V3 MHA equiv.    | 0.537  | 0.268               | 2.00                   | 9.60                          |
-| DeepSeek V3 GQA equiv.    | 0.101  | 0.050               | 2.02                   | 9.70                          |
-| **DeepSeek V3 MLA** | 2.28   | 0.005               | 469                    | 1979                       |
+| Llama-13b                 | 0.17  | 0.16               |  0.98                    | 4.68                          |
+| DeepSeek V3 MHA equiv.    | 0.54  | 0.53              | 1.00                   | 4.80                          |
+| DeepSeek V3 GQA equiv.    | 0.10  | 0.10               | 1.00                  | 4.85                          |
+| **DeepSeek V3 MLA** | 2.28   | 0.01               | 235                    |         990               |
 
 *Table 3: Attention Operator Table (`B=1`)*
 
-By redesigning the attention mechanism, MLA has fundamentally changed the nature of the attention kernel. The number of floating point operations has increased approximately 4 times versus standard MHA and 22 times versus GQA. However, this trade-off is clearly intentional because MLA dramatically increases the arithmetic intensity of the kernel—over 200 times compared to traditional approaches.
+By redesigning the attention mechanism, MLA has fundamentally changed the nature of the attention kernel. The number of floating point operations has increased approximately 4 times versus standard MHA and 22 times versus GQA. However, this trade-off is clearly intentional because MLA dramatically increases the arithmetic intensity of the kernel—over 200 times compared to traditional approaches. It is worth noting that at low sequence lengths `L<1394` the inensity will be below the ridge point and so memory bound but with still far greater intensity than the other decoding kernels. 
 
-The MLA attention kernel is now **no longer memory bound but compute bound**, the intensity has increased significantly meaning the kernel spends less time idle. Furthermore, despite performing more calculations, the time elapsed will be substantially reduced because GPUs excel at handling highly parallel computations.
+The MLA attention kernel at reasonal sequence lengths is now **no longer memory bound but compute bound**, the intensity has increased significantly meaning the kernel spends less time idle. Furthermore, despite performing more calculations, the time elapsed will be substantially reduced because GPUs excel at handling highly parallel computations.
 
 Essentially, MLA makes a strategic trade: it increases the raw number of computations within the attention kernel but drastically reduces the required memory access relative to those computations. This boosts operational intensity and ultimately performance.
 
@@ -171,5 +171,5 @@ In essence, MLA optimizes Transformer inference by drastically cutting KV cache 
 ## References
 
 
-1.  Austin et al. [*All About Rooflines*](https://jax-ml.github.io/scaling-book/roofline/). The Scaling ML Book.
-2.  Chen, Carol. (2023, June 12). [*Transformer Inference Arithmetic*](https://kipp.ly/transformer-inference-arithmetic/). 
+1.  Austin et al. (2025) [*All About Rooflines*](https://jax-ml.github.io/scaling-book/roofline/). The Scaling ML Book.
+2.  Chen, Carol. (2023). [*Transformer Inference Arithmetic*](https://kipp.ly/transformer-inference-arithmetic/). 
