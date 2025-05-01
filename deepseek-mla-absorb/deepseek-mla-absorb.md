@@ -33,7 +33,7 @@ $$
 
 Figure 1 helps visualize the calculations. The output is then concatenated for all the separate heads and passed through a further linear projection to give the final output of the attention layer. 
 
-![attention_figure](images/attention_figure.png)
+![attention_figure](blog/images/attention_figure.png)
 
 *Figure 1: The figures show the key computations in attention, and how the KV cache matrices increase with sequence length.* 
 
@@ -137,7 +137,7 @@ def forward_compressed(self, hidden_state: torch.Tensor, compressed_kv: torch.Te
 
 We repeat a similar analysis done in [4] on an H200 and show the result in Figure 2. The [code](https://github.com/datacrunch-research/mla-blog-absorption/tree/main) shared in the repository is a simplified version of MLA that isolates the computations of the down and up projections and does not include the RoPE embeddings to keep the code simpler.
 
-![benchmark_comparison.png](images/benchmark_comparison.png)
+![benchmark_comparison.png](blog/images/benchmark_comparison.png)
 
 *Figure 2: The uncompressed attention KV Cache MLA uses equation (1) and stores the full KV cache. The compressed version uses equation (1) but stores the compressed KV cache and projects it up. The absorbed attention variant keeps calculations in the compressed state, reducing computational overhead.*  
 
@@ -153,7 +153,7 @@ $$
 
 where $\kappa_i=\mathbf{W}_{\mathbf{uk}}^\top\, \mathbf{q}_i$ and $\mathbf{W}_{\mathbf{uk}}$ is the key equivalent of  $\mathbf{W}_{\mathbf{uv}}$. Now the dimensions of the vectors inside the inner-product are both $d_c$ and not $d_h$. The attention scores for one head in an attention layer are shown in Figure 3.
 
-![mla_1.png](images/mla_1.png)
+![mla_1.png](blog/images/mla_1.png)
 
 *Figure 3: How the attention score computation takes place with the weight absorption trick.*
 
@@ -165,7 +165,7 @@ $$
 
 Which could be visualized as:
 
-![mla_2.png](images/mla_2.png)
+![mla_2.png](blog/images/mla_2.png)
 
 *Figure 4:  Computation of the output using the weight absorption trick.*
 
