@@ -19,15 +19,20 @@ Above $\mathbf{o}_i$ is the output for a single head (without the softmax scalin
 
 $$
 \mathbf{q}_i \in \mathbb{R}^{d_h} \text{ (query vector for latest token i)},
-\\
+$$
+$$
 \mathbf{x}_i \in \mathbb{R}^{d} \text{ (input token embedding)},
-\\
+$$
+$$
 \mathbf{W^Q} \in \mathbb{R}^{d_h \times d} \text{ (Query projection matrix)}, \\
-\\
+$$
+$$
 \mathbf{K} \in \mathbb{R}^{n \times d_h} \text{ (key matrix for whole sequence)},
-\\
+$$
+$$
 \mathbf{V} \in \mathbb{R}^{n \times d_h} \text{ (value matrix for whole sequence)},
-\\
+$$
+$$
 \mathbf{o}_i \in \mathbb{R}^{d_h} \text{ (output attention vector)}.
 $$
 
@@ -71,45 +76,58 @@ Many innovations have been made to reduce the KV cache; the most popular approac
 Let's now compute all head values in an attention layer as one unified projection (the keys have a similar calculation). For the standard MHA, this becomes:
 
 $$
-\mathbf{\bar{v}}_i = \mathbf{\bar{W}}_\mathbf{v}\mathbf{x}_i, 
+\mathbf{\bar{v}}\_i = \mathbf{\bar{W}}\_\mathbf{v}\mathbf{x}\_i, 
 $$
 
 where,
 
 $$
-\mathbf{\bar{v}} = [\mathbf{v}_1; \mathbf{v}_2; \ldots; \mathbf{v}_h] \text{, the concatenated vector for all heads, } \, \\ \text{so } \mathbf{\bar{v}} \in \mathbb{R}^{h \cdot d_h} \text{ and}  \\
-\mathbf{\bar{W}_v} = [\mathbf{W_v}_1; \mathbf{W_v}_2; \ldots; \mathbf{W_v}_h]^{\top} \text{, the stacked weight matrices} \\\text{so } \mathbf{\bar{W}_v} \in \mathbb{R}^{h\cdot d_h \times d}.
+\mathbf{\bar{v}}\_i = [\mathbf{v}_1; \mathbf{v}_2; \ldots; \mathbf{v}_h] \text{, the concatenated vector for all heads, }
+$$
+$$
+\text{so } \mathbf{\bar{v}} \in \mathbb{R}^{h \cdot d_h} \text{ and}
+$$
+$$
+\mathbf{\bar{W}_v} = [\mathbf{W_v}_1; \mathbf{W_v}_2; \ldots; \mathbf{W_v}_h]^{\top} \text{, the stacked weight matrices}
+$$
+$$
+\text{so } \mathbf{\bar{W}_v} \in \mathbb{R}^{h\cdot d_h \times d}.
 $$
 
 Using this formulation, we can now write GQA:
 
 $$
-\mathbf{\bar{v}}^{g}_{i} = \mathbf{P}^{g}\mathbf{\bar{W}}^{g}_\mathbf{v}\mathbf{x}_i, 
+\mathbf{\bar{v}}^{g}\_{i} = \mathbf{P}^{g}\mathbf{\bar{W}}^{g}\_\mathbf{v}\mathbf{x}\_i, 
 $$
 
 where,
 
 $$
-\mathbf{\bar{W}}^{g}_\mathbf{v} = [\mathbf{W_v}_1; \mathbf{W_v}_2; \ldots; \mathbf{W_v}_g]^{\top}  \text{ is concatenated group weight matrices,}\\ \text{so }\mathbf{\bar{W}^{g}_{v}} \in \mathbb{R}^{g \cdot d_h \times d}, \\
-\mathbf{P}^g = \begin{bmatrix} 1 & 0 & \cdots & 0 \\0 & 1 & \cdots & 0 \\\vdots & \vdots & \ddots & \vdots \\1 & 0 & \cdots & 0\end{bmatrix} \text{ is the selector matrix, } \\\text{so } \mathbf{P} ^g\in \mathbb{R}^{h \cdot d_h \times g \cdot d_h}.
+\mathbf{\bar{W}}^{g}\_\mathbf{v} = [\mathbf{W\_v}\_1; \mathbf{W\_v}\_2; \ldots; \mathbf{W\_v}\_g]^{\top}  \text{ is concatenated group weight matrices,}
+$$
+$$ 
+\text{so }\mathbf{\bar{W}^{g}\_{v}} \in \mathbb{R}^{g \cdot d\_h \times d},
+$$
+$$
+\mathbf{P}^g = \begin{bmatrix} 1 & 0 & \cdots & 0 \\0 & 1 & \cdots & 0 \\\vdots & \vdots & \ddots & \vdots \\1 & 0 & \cdots & 0\end{bmatrix} \text{ is the selector matrix, } \\\text{so } \mathbf{P} ^g\in \mathbb{R}^{h \cdot d\_h \times g \cdot d\_h}.
 $$
 
-The selector matrix $\mathbf{P}^g$ is a binary matrix that assigns each head to one of the shared groups, effectively copying keys and values from group heads to multiple query heads, which is key to GQA's memory optimization strategy. This is how memory efficiency is achieved compared to standard MHA: by storing the reduced number of groups $\mathbf{c}^g_i = \mathbf{\bar{W}}^{\mathbf{g}}_\mathbf{v}\mathbf{x}_i$ instead of computing and storing for all heads. The memory saving is thus the ratio of the number of heads to the number of groups.
+The selector matrix $\mathbf{P}^g$ is a binary matrix that assigns each head to one of the shared groups, effectively copying keys and values from group heads to multiple query heads, which is key to GQA's memory optimization strategy. This is how memory efficiency is achieved compared to standard MHA: by storing the reduced number of groups $\mathbf{c}^g\_i = \mathbf{\bar{W}}^{\mathbf{g}}\_\mathbf{v}\mathbf{x}\_i$ instead of computing and storing for all heads. The memory saving is thus the ratio of the number of heads to the number of groups.
 
 As pointed out in [2], MLA is similar to GQA when in a projection form, MLA is:
 
 $$
-\mathbf{\bar{v}}^{l}_{i} = \mathbf{W}_{\mathbf{uv}}\mathbf{W}_{\mathbf{dkv}}\mathbf{x}_i.
+\mathbf{\bar{v}}^{l}\_{i} = \mathbf{W}\_{\mathbf{uv}}\mathbf{W}\_{\mathbf{dkv}}\mathbf{x}\_i.
 $$
 
 where,
 
 $$
-\mathbf{W}_{\mathbf{dkv}} \in \mathbb{R}^{ d_c \times d}\text{ is the down projection matrix and} \\
-\mathbf{W}_{\mathbf{uv}} \in \mathbb{R}^{ h \cdot d_h \times d_c} \text{ is the up projection matrix. }
+\mathbf{W}\_{\mathbf{dkv}} \in \mathbb{R}^{ d\_c \times d}\text{ is the down projection matrix and} \\
+\mathbf{W}\_{\mathbf{uv}} \in \mathbb{R}^{ h \cdot d\_h \times d\_c} \text{ is the up projection matrix. }
 $$
 
-The notation now is the same in the original explanation in [3], where $\mathbf{c}^{\mathbf{kv}}_i = \mathbf{W}_{\mathbf{dkv}}\mathbf{x}_i$, signifying a shared down projection matrix for keys and values. Again, the above is only for values, but a similar process can be done for keys. The ablations in [3] suggest that MLA convincingly performs better than GQA, and in this form, there may be some intuition for why. Both methods involve a down projection to a memory compression (compressed KV cache) followed by a subsequent up projection for the MHA input, similar to encoder/decoder models. However, MLA learns an up projection $\mathbf{W}_{\mathbf{uv}}$, whereas GQA has an arbitrary selector matrix $\mathbf{P}$, giving intuition for better performance from MLA, as it is more expressive.
+The notation now is the same in the original explanation in [3], where $\mathbf{c}^{\mathbf{kv}}\_i = \mathbf{W}\_{\mathbf{dkv}}\mathbf{x}\_i$, signifying a shared down projection matrix for keys and values. Again, the above is only for values, but a similar process can be done for keys. The ablations in [3] suggest that MLA convincingly performs better than GQA, and in this form, there may be some intuition for why. Both methods involve a down projection to a memory compression (compressed KV cache) followed by a subsequent up projection for the MHA input, similar to encoder/decoder models. However, MLA learns an up projection $\mathbf{W}\_{\mathbf{uv}}$, whereas GQA has an arbitrary selector matrix $\mathbf{P}$, giving intuition for better performance from MLA, as it is more expressive.
 
 ## Weight Absorption Trick
 
@@ -143,15 +161,15 @@ We repeat a similar analysis done in [4] on an H200 and show the result in Figur
 
 The compressed attention layer has slower inference speed versus uncompressed layer due to the additional computational cost. Furthermore, the potential memory savings are also reduced by the need to project the KV cache. The weight absorption trick solves this problem. It works by ‘absorbing’ weights and rewriting the inputs in the attention formula.
 
-Firstly, observe the following rearrangement of the inner product terms in (1), for a single element of $\mathbf{a}_i$ using the MLA projections it can be written as:
+Firstly, observe the following rearrangement of the inner product terms in (1), for a single element of $\mathbf{a}\_i$ using the MLA projections it can be written as:
 
 $$
-\mathbf{q}^{\top}_i \mathbf{k}_j = \mathbf{q}_i^{\top}\, \mathbf{W}_{\mathbf{uk}}\, \mathbf{c}_j^{\mathbf{kv}} 
-= \Bigl(\mathbf{W}_{\mathbf{uk}}^\top \mathbf{q}_i\Bigr)^\top\, \mathbf{c}_j^{\mathbf{kv}} 
-= \mathbf{\kappa}_i^\top\, \mathbf{c}_j^{\mathbf{kv}}.
+\mathbf{q}^{\top}\_i \mathbf{k}\_j = \mathbf{q}\_i^{\top}\, \mathbf{W}\_{\mathbf{uk}}\, \mathbf{c}\_j^{\mathbf{kv}} 
+= \Bigl(\mathbf{W}\_{\mathbf{uk}}^\top \mathbf{q}\_i\Bigr)^\top\, \mathbf{c}\_j^{\mathbf{kv}} 
+= \mathbf{\kappa}\_i^\top\, \mathbf{c}\_j^{\mathbf{kv}}.
 $$
 
-where $\kappa_i=\mathbf{W}_{\mathbf{uk}}^\top\, \mathbf{q}_i$ and $\mathbf{W}_{\mathbf{uk}}$ is the key equivalent of  $\mathbf{W}_{\mathbf{uv}}$. Now the dimensions of the vectors inside the inner-product are both $d_c$ and not $d_h$. The attention scores for one head in an attention layer are shown in Figure 3.
+where $\kappa\_i=\mathbf{W}\_{\mathbf{uk}}^\top\, \mathbf{q}\_i$ and $\mathbf{W}\_{\mathbf{uk}}$ is the key equivalent of  $\mathbf{W}\_{\mathbf{uv}}$. Now the dimensions of the vectors inside the inner-product are both $d\_c$ and not $d\_h$. The attention scores for one head in an attention layer are shown in Figure 3.
 
 ![mla_1.png](blog/images/mla_1.png)
 
@@ -160,7 +178,7 @@ where $\kappa_i=\mathbf{W}_{\mathbf{uk}}^\top\, \mathbf{q}_i$ and $\mathbf{W}_{\
 Furthermore, we can rewrite the output as,
 
 $$
-\mathbf{o}_i = \sum_j a_{ij} \mathbf{v}_j =  \sum_j a_{ij} (\mathbf{W}_\mathbf{uv} \mathbf{c}^{\mathbf{kv}}_j) = \mathbf{W}_\mathbf{uv} \sum_j a_{ij} \mathbf{c}^{\mathbf{kv}}_j.
+\mathbf{o}\_i = \sum\_j a\_{ij} \mathbf{v}\_j =  \sum\_j a\_{ij} (\mathbf{W}\_\mathbf{uv} \mathbf{c}^{\mathbf{kv}}\_j) = \mathbf{W}\_\mathbf{uv} \sum\_j a\_{ij} \mathbf{c}^{\mathbf{kv}}\_j.
 $$
 
 Which could be visualized as:
@@ -172,7 +190,7 @@ Which could be visualized as:
 Combining these two terms we can rewrite (1) as follows:
 
 $$
-\mathbf{o}_i = \mathbf{W}_\mathbf{uv}\mathbf{a_i}\mathbf{C}^{\mathbf{kv}}, \text{ where } \mathbf{a_i} = \text{softmax} \left( \kappa_i^\top \mathbf{C}^{\mathbf{kv}} \right) \,\text{and} \, \, \mathbf{C}^{\mathbf{kv}} = [\mathbf{c}_i^{\mathbf{kv}}; \ldots; \mathbf{c}_n^{\mathbf{kv}}]
+\mathbf{o}\_i = \mathbf{W}\_\mathbf{uv}\mathbf{a\_i}\mathbf{C}^{\mathbf{kv}}, \text{ where } \mathbf{a\_i} = \text{softmax} \left( \kappa\_i^\top \mathbf{C}^{\mathbf{kv}} \right) \,\text{and} \, \, \mathbf{C}^{\mathbf{kv}} = [\mathbf{c}\_i^{\mathbf{kv}}; \ldots; \mathbf{c}\_n^{\mathbf{kv}}]
 $$
 
 The code snippet to calculate attention now would appear as follows, for all heads and for a batch again:
@@ -207,7 +225,7 @@ def forward(self, hidden_states_q: torch.Tensor, compressed_kv: torch.Tensor):
 
 The weight absorption trick shows speed-ups for the attention layer, as shown in Figure 2. Looking at the code and contrasting it with the standard MHA diagram, we can see two important features of the formulation:
 
-1. The expansion of the compressed KV is now avoided. Instead, the compressed KV is used directly in the score and output calculations. The $\mathbf{W}_{\mathbf{uk}}$   and  $\mathbf{W}_\mathbf{uv}$ act as down and up projections to match the local head dimension.
+1. The expansion of the compressed KV is now avoided. Instead, the compressed KV is used directly in the score and output calculations. The $\mathbf{W}\_{\mathbf{uk}}$   and  $\mathbf{W}\_\mathbf{uv}$ act as down and up projections to match the local head dimension.
 2. Every query head effectively attends the same key and value, meaning a group head size of one.
 
 The absorption trick is now implemented by default in SGlang [5] and other inference packages. Further optimizations have also been done in terms of parallelization and memory management which we hope to discuss in future editions of our blog.
