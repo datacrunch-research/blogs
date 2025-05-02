@@ -108,8 +108,9 @@ $$
 $$ 
 \text{so }\mathbf{\bar{W}^{g}\_{v}} \in \mathbb{R}^{g \cdot d\_h \times d},
 $$
+
 $$
-\mathbf{P}^g = \begin{bmatrix} 1 & 0 & \cdots & 0 \\0 & 1 & \cdots & 0 \\\vdots & \vdots & \ddots & \vdots \\1 & 0 & \cdots & 0\end{bmatrix} \text{ is the selector matrix, } \\\text{so } \mathbf{P} ^g\in \mathbb{R}^{h \cdot d\_h \times g \cdot d\_h}.
+\mathbf{P}^g = \begin{bmatrix} 1 & 0 & \cdots & 0 \\ 0 & 1 & \cdots & 0 \\ \vdots & \cdots & \ddots & \vdots \\1 & 0 & \cdots & 0\end{bmatrix} \text{ is the selector matrix, } \\\text{so } \mathbf{P} ^g\in \mathbb{R}^{h \cdot d\_h \times g \cdot d\_h}.
 $$
 
 The selector matrix $\mathbf{P}^g$ is a binary matrix that assigns each head to one of the shared groups, effectively copying keys and values from group heads to multiple query heads, which is key to GQA's memory optimization strategy. This is how memory efficiency is achieved compared to standard MHA: by storing the reduced number of groups $\mathbf{c}^g\_i = \mathbf{\bar{W}}^{\mathbf{g}}\_\mathbf{v}\mathbf{x}\_i$ instead of computing and storing for all heads. The memory saving is thus the ratio of the number of heads to the number of groups.
