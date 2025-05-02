@@ -12,7 +12,7 @@ One of the key innovations enabling the DeepSeek V3 and the subsequent R1 model 
 Multi-head attention (MHA) is typically memory-bound when generating a response (token-phase [1]). In a generation, the attention calculation is only for the latest token, but it takes all keys and values of the whole sequence as an input. To see where this comes from, let's repeat the basic formula:
 
 $$
-\mathbf{o}_i= \mathbf{a}_i\mathbf{V} \quad \text{where}\, \, \, \,  \mathbf{a}_i = \text{softmax}\left( \mathbf{q}_i^{\top} \mathbf{K} \right) \,\, \text{and} \, \, \, \, \mathbf{q}_i = \mathbf{W^{Q}}\mathbf{x}_i. \quad \quad (1)
+\mathbf{o}_i= \mathbf{a}_i\mathbf{V} \quad \text{where} \quad  \mathbf{a}_i = \text{softmax}\left( \mathbf{q}_i^{\top} \mathbf{K} \right) \quad \text{and} \quad \mathbf{q}_i = \mathbf{W^{Q}}\mathbf{x}_i. \quad \quad (1)
 $$
 
 Above $\mathbf{o}_i$ is the output for a single head (without the softmax scaling factor) for the current token, the definitions are:
