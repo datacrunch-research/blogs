@@ -1,4 +1,4 @@
-# DeepSeek + SGLang: Multi-Head Latent Attention (Part 1)
+# DeepSeek + SGLang: Multi-Head Latent Attention 
 
 This post continues our technical series exploring inference of DeepSeek v3 on [SGLang](https://github.com/sgl-project/sglang). Our goal is to provide both theoretical insights and practical implementation details.
 
@@ -12,7 +12,7 @@ One of the key innovations enabling the DeepSeek V3 and the subsequent R1 model 
 Multi-head attention (MHA) is typically memory-bound when generating a response (token-phase [1]). In a generation, the attention calculation is only for the latest token, but it takes all keys and values of the whole sequence as an input. To see where this comes from, let's repeat the basic formula:
 
 $$
-\mathbf{o}_i= \mathbf{a}_i\mathbf{V} \, \, \, \, \text{where}\, \, \, \,  \mathbf{a}_i = \text{softmax}\left( \mathbf{q}_i^{\top} \mathbf{K} \right) \,\, \text{and} \, \, \, \, \mathbf{q}_i = \mathbf{W^{Q}}\mathbf{x}_i. \quad \quad (1)
+\mathbf{o}_i= \mathbf{a}_i\mathbf{V} \quad \text{where}\, \, \, \,  \mathbf{a}_i = \text{softmax}\left( \mathbf{q}_i^{\top} \mathbf{K} \right) \,\, \text{and} \, \, \, \, \mathbf{q}_i = \mathbf{W^{Q}}\mathbf{x}_i. \quad \quad (1)
 $$
 
 Above $\mathbf{o}_i$ is the output for a single head (without the softmax scaling factor) for the current token, the definitions are:
