@@ -129,14 +129,14 @@ $$\text{Achievable Performance (FLOPs/s) = min(Peak Compute FLOPs/s (FP16), Inte
 Putting this all together we get the following results:
 
 <a id="table3"></a>
-| Model                     | GFLOPs | Memory Bandwidth GB | Intensity (FLOPs/Byte) | Theoretical TFLOPS  |
+| Model                     | GFLOPs | Memory Bandwidth GB | Intensity (FLOPs/Byte) | Theoretical TFLOPs/s  |
 | :------------------------ | :----- | :------------------ | :--------------------- | :---------------------------- |
 | Llama-13b                 | 0.17  | 0.16               |  0.98                    | 4.68                          |
 | DeepSeek V3 MHA equiv.    | 0.54  | 0.53              | 1.00                   | 4.80                          |
 | DeepSeek V3 GQA equiv.    | 0.10  | 0.10               | 1.00                  | 4.85                          |
 | **DeepSeek V3 MLA** | 2.28   | 0.01               | 235                    |         990               |
 
-*Table 3: Attention Operator Table (`B=1`) with the intenesity calculation and theoretical TFLOPS*
+*Table 3: Attention Operator Table (`B=1`) with the intenesity calculation and theoretical TFLOPs/s*
 
 By redesigning the attention mechanism, MLA has fundamentally changed the nature of the attention kernel (Table 3). The number of floating point operations has increased approximately 4 times versus standard MHA and 22 times versus GQA. However, this trade-off is clearly intentional because MLA dramatically increases the arithmetic intensity of the kernel—over 200 times compared to traditional approaches. It is worth noting that at low sequence lengths `L<1394` the intensity will be below the ridge point and so thus a memory bound kernel. 
 
@@ -160,7 +160,7 @@ In Figure 2 we utilize the main inference kernel library [FlashInfer](https://gi
 
 ## Conclusions
 
-In essence, MLA optimizes transformer inference by drastically cutting KV cache memory and boosting the attention kernel's operational intensity. This shift from memory-bound towards compute-bound allows for significantly higher achieved TFLOPS and faster token generation, validating MLA's effectiveness for efficient deployment.
+In essence, MLA optimizes transformer inference by drastically cutting KV cache memory and boosting the attention kernel's operational intensity. This shift from memory-bound towards compute-bound allows for significantly higher achieved TFLOPs/s and faster token generation, validating MLA's effectiveness for efficient deployment.
 
 
 ---
