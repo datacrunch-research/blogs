@@ -46,7 +46,7 @@ Before performing the MLA forward pass, one must update the KV cache for the cur
 
 The KV cache calculation that needs to be performed per layer is:
 
-$$\mathbf{c}_i^{\mathbf{kv}} = \mathbf{W}_{\mathbf{dkv}}\mathbf{x}_i.$$
+$$\mathbf{c}\_i^{\mathbf{kv}} = \mathbf{W}\_{\mathbf{dkv}}\mathbf{x}_i$$
 
 For a batch size `B`, this matrix-vector multiplication requires:
 
