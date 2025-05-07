@@ -45,9 +45,9 @@ The KV cache's memory storage requirements for DeepSeek V3's MLA are dramaticall
 Before performing the MLA forward pass, one must update the KV cache for the current token. DeepSeek V3 includes query down-projection and up-projection, but we'll focus specifically on the KV-cache elements and the kernel calculation.
 
 The KV cache calculation that needs to be performed per layer is:
-
-$$\mathbf{c}\_i^{\mathbf{kv}} = \mathbf{W}\_{\mathbf{dkv}}\mathbf{x}_i$$
-
+$$
+\mathbf{c}_i^{\mathbf{kv}} = \mathbf{W}_{\mathbf{dkv}} \mathbf{x}_i
+$$
 For a batch size `B`, this matrix-vector multiplication requires:
 
 $$\text{FLOPs} = 2 \cdot n_{\text{layers}}  \cdot B \cdot C_v \cdot D.$$
