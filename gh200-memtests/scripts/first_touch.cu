@@ -4,6 +4,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <numa.h>
+#include <numaif.h>
+#include <errno.h>
+#include <stdint.h>
 
 #define GIB (1024LL*1024*1024)
 #define SIZE_BYTES (1LL * GIB)
@@ -32,11 +35,17 @@ double get_time() {
 int get_numa_node_of_pointer(void* ptr) {
     int numa_node = -1;
     if (numa_available() >= 0) {
-        void* pages[1] = {ptr};
+        // Get system page size and align pointer to page boundary
+        size_t page_size = getpagesize();
+        void* page_aligned_ptr = (void*)((uintptr_t)ptr & ~(page_size - 1));
+        void* pages[1] = {page_aligned_ptr};
         int status[1] = {-1};
-        int ret = numa_move_pages(0, 1, pages, NULL, status, 0);
+        int ret = move_pages(0, 1, pages, NULL, status, 0);
+        // int ret = numa_move_pages(0, 1, pages, NULL, status, 0);
         if (ret == 0) {
             numa_node = status[0];
+        } else {
+            printf("    move_pages error: %d (errno: %d)\n", ret, errno);
         }
     }
     return numa_node;
@@ -105,6 +114,7 @@ void gpu_first_touch(float* data) {
 void run_test_iterations(float* ptr, const char* test_name, int iterations) {
     for (int i = 1; i <= iterations; i++) {
         printf("\n  Iteration %d:\n", i);
+        check_numa_location(ptr, "Before GPU processing");
         run_gpu_intensive_processing(ptr);
         check_numa_location(ptr, "After GPU processing");
         if (i < iterations) {
@@ -166,7 +176,7 @@ int main() {
     printf("  GPU first touch:\n");
     run_gpu_intensive_processing(managed_gpu);
     check_numa_location(managed_gpu, "After GPU first touch");
-    run_test_iterations(managed_gpu, "managed_gpu", 2);
+    run_test_iterations(managed_gpu, "managed_gpu", 3);
     cudaFree(managed_gpu);
 
     // Test 5: cudaMalloc baseline
