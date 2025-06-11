@@ -16,6 +16,13 @@ __global__ void processing_kernel(float* data, long long num_elements) {
     }
 }
 
+__global__ void first_touch_kernel(float* data, long long num_elements) {
+    long long idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_elements) {
+        data[idx] = (float)idx * 0.1f;
+    }
+}
+
 double get_time() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -76,6 +83,24 @@ void cpu_first_touch(float* data, long long n) {
     }
 }
 
+void gpu_first_touch(float* data) {
+    int blockSize = 256;
+    int gridSize = (N_ELEMENTS + blockSize - 1) / blockSize;
+    
+    double start_time = get_time();
+    first_touch_kernel<<<gridSize, blockSize>>>(data, N_ELEMENTS);
+    cudaError_t err = cudaDeviceSynchronize();
+    double elapsed_time = get_time() - start_time;
+    
+    if (err != cudaSuccess) {
+        printf("  GPU first touch failed: %s\n", cudaGetErrorString(err));
+        return;
+    }
+    
+    double bandwidth_gib_s = (SIZE_BYTES / GIB) / elapsed_time;
+    printf("  GPU init: %.2f ms, %.2f GiB/s\n", elapsed_time * 1000, bandwidth_gib_s);
+}
+
 
 void run_test_iterations(float* ptr, const char* test_name, int iterations) {
     for (int i = 1; i <= iterations; i++) {
@@ -113,7 +138,16 @@ int main() {
     run_test_iterations(malloc_ptr, "malloc", 3);
     free(malloc_ptr);
 
-    // Test 2: cudaMallocManaged with CPU first touch
+    // Test 2: malloc with GPU first touch
+    printf("\n\n2. malloc with GPU first touch:\n");
+    float* malloc_gpu_ptr = (float*)malloc(SIZE_BYTES);
+    if (!malloc_gpu_ptr) return 1;
+    gpu_first_touch(malloc_gpu_ptr);
+    check_numa_location(malloc_gpu_ptr, "After malloc & GPU touch");
+    run_test_iterations(malloc_gpu_ptr, "malloc_gpu", 3);
+    free(malloc_gpu_ptr);
+
+    // Test 3: cudaMallocManaged with CPU first touch
     printf("\n\n2. cudaMallocManaged with CPU first touch:\n");
     float* managed_cpu;
     if (cudaMallocManaged(&managed_cpu, SIZE_BYTES) != cudaSuccess) return 1;
@@ -125,8 +159,8 @@ int main() {
     run_test_iterations(managed_cpu, "managed_cpu", 3);
     cudaFree(managed_cpu);
 
-    // Test 3: cudaMallocManaged with GPU first touch
-    printf("\n\n3. cudaMallocManaged with GPU first touch:\n");
+    // Test 4: cudaMallocManaged with GPU first touch
+    printf("\n\n4. cudaMallocManaged with GPU first touch:\n");
     float* managed_gpu;
     if (cudaMallocManaged(&managed_gpu, SIZE_BYTES) != cudaSuccess) return 1;
     printf("  GPU first touch:\n");
@@ -135,8 +169,8 @@ int main() {
     run_test_iterations(managed_gpu, "managed_gpu", 2);
     cudaFree(managed_gpu);
 
-    // Test 4: cudaMalloc baseline
-    printf("\n\n4. cudaMalloc (GPU device memory):\n");
+    // Test 5: cudaMalloc baseline
+    printf("\n\n5. cudaMalloc (GPU device memory):\n");
     float* device_ptr;
     if (cudaMalloc(&device_ptr, SIZE_BYTES) != cudaSuccess) return 1;
     printf("  Location: GPU HBM\n");
