@@ -16,7 +16,7 @@ The NVIDIA B200 and B300 are both part of the Blackwell architecture family. The
 | **GPU Memory**               | 180 GB HBM3E | **288 GB HBM3E** |
 | **GPU Memory Bandwidth**     | 7.7 TB/s | **8 TB/s** |
 | **NVLink bandwidth per GPU** | 1.8 TB/s | 1.8 TB/s |
-| **Max Thermal Design Power (TDP) ** | Up to 1,000W | Up to **1,100W** |
+| **Max Thermal Design Power (TDP)** | Up to 1,000W | Up to **1,100W** |
 
 Key Differences Between NVIDIA B200 and B300 GPUs
 
