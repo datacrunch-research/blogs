@@ -52,13 +52,15 @@ OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 mpirun -np 4 all_reduc
 sudo docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
 ```
 
-- virtual env with torch 2.9 + cu13 out ot the box. (ptxas fix)
+- virtual env with torch 2.9 + cu13 out ot the box.
+  
+As of now **(12-12-2025)**, current torch stable version `torch==2.9.1+cu130` [https://download.pytorch.org/whl/cu130](https://download.pytorch.org/whl/cu130) points to a Triton version which PTXAS is not compiled for `sm_103a` compute capabilites (B300). Thus a `venv` is provided with a solution. (See Anex I)
 
-> As of now (current date) current torch installation `torch==2.9.1+cu130` [https://download.pytorch.org/whl/cu130](https://download.pytorch.org/whl/cu130) points to a Triton version which PTXAS is not compiled for `sm_103a` compute capabilites (B300). So a venv is provided with a solution. (See Anex I)
-> 
+> UPDATE: torch nighlty version seems to fix this issue `pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu130`
 
+Testing performed using Persistent matmul kernel from [Triton repo](https://github.com/triton-lang/triton/blob/main/python/tutorials/09-persistent-matmul.py):
 ```bash
-(torch) root@b300-blog:~/triton/python/tutorials$python 09-persistent-matmul.py 
+(torch) python 09-persistent-matmul.py 
 M=32, N=32, K=32, verification naive vs: 
   Torch: ✅  
   cuBLAS: ✅  
