@@ -8,13 +8,13 @@ In this blog, we highlight the most convenient features that ensures a quick and
 ### **Hardware:**
 
 
-- Multiple configurations for the node offering of B300s and B200s SXM6 
+- Multiple configurations for the node offering of B300s and B200s SXM6:
 
 (maybe commenting here something about the [prices](https://datacrunchio.slack.com/archives/C0688DZG3EC/p1765449144444659)) 
 
 ![imagen.png](imgs/gpus.png)
 
-> SXM6 means **SMX6** B300 on a **HGX** B300 board (with NVIDIA NVLink 5 + NVSwitch domain), which differs from the on-chip GB300s installed on the trays of the NVL72 GB300.
+> SXM6 means **SXM6** B300 on a **HGX** B300 board (with NVIDIA NVLink 5 + NVSwitch domain), which differs from the on-chip GB300s installed on the trays of the NVL72 GB300.
 > 
 - Persistent storage options: block volumes or SFS that can be shared over multiples VMs, with the option of attaching existing storage volumes:
 
