@@ -4,7 +4,7 @@
 
 The AI cloud landscape is shifting fundamentally. While legacy cloud infrastructure was built to optimize developer time, the AI-native cloud must optimize for performance, energy density, and compute costs. As models grow exponentially larger, the industry is racing to solve a critical bottleneck: how to increase compute efficiency without sacrificing accuracy.
 
-At our recent event at EurIPS 2025 in Copenhagen, we explored the next leap in this evolution: **Low Precision AI and the arrival of FP4 on NVIDIA Blackwell**[cite: 654, 656].
+At our recent event at EurIPS 2025 in Copenhagen, we explored the next leap in this evolution: **Low Precision AI and the arrival of FP4 on NVIDIA Blackwell**.
 
 ## The March Toward 1000x Performance
 Over the last decade, single-chip inference performance has increased by roughly 1000x. This massive jump wasn’t achieved through a single breakthrough but a combination of factors:
@@ -21,7 +21,9 @@ To understand why FP4 is revolutionary, we have to look at how computers represe
 3.  **Mantissa:** The precision (samples between powers of two).
 
 The mathematical representation is defined as:
-$$N_{10} = (-1)^{S} \times 1.M_{10} \times 2^{E_{10} - bias}$$ 
+$$ 
+N_{10} = (-1)^{S} \times 1.M_{10} \times 2^{E_{10} - bias} 
+$$
 
 Historically, deep learning relied on FP32 (32-bit). Over time, the industry realized that deep learning models are surprisingly resilient to noise, allowing us to move to FP16 and BF16 (2016-2017). By 2022, the Hopper architecture introduced FP8. Now, Blackwell is pushing the boundary to **NVFP4**.
 
@@ -41,9 +43,19 @@ While the Open Compute Project (OCP) MXFP4 specification uses a block size of 32
 Training in FP4 requires a sophisticated "recipe" to ensure convergence. The Blackwell architecture supports this through a specific pipeline:
 
 1.  **2D Scaling:** Scaling factors are applied row-wise and column-wise to maximize dynamic range.
-2.  **Stochastic Rounding (SR):** Unlike "nearest" rounding, SR rounds probabilistically. The formula preserves the cexpected value of the number: $\mathbb{E}[Round(x)] = x$ .
-    $$Round(x) = \begin{cases} \lfloor x \rfloor, & \text{w/ prob. } 1-p \\ \lceil x \rceil, & \text{w/ prob. } p \end{cases}$$
-    $$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
+2.  **Stochastic Rounding (SR):** Unlike "nearest" rounding, SR rounds probabilistically. The formula preserves the cexpected value of the number: 
+$$ 
+\mathbb{E}[\text{Round}(x)] = x 
+$$ .
+$$
+\text{Round}(x) = 
+\begin{cases} 
+    \lfloor x \rfloor, & \text{w/ prob. } 1-p \\ 
+    \lceil x \rceil, & \text{w/ prob. } 
+\end{cases}
+$$
+
+$$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
 
 3.  **Random Hadamard Transforms:** This technique spreads outlier information across the vector, preventing specific weights from dominating the quantization error.
 
