@@ -31,7 +31,7 @@ Blackwell architecture includes new features such as 5th-generation tensor cores
  Ubuntu (24.04) with **CUDA 13.0/12.8** toolkit with the latest NVIDIA driver versions (**580**) can be selected during provisioning the VMs. Docker and NVIDIA container toolkit can also be installed when configuring the deployment of the VM:
 
 ```shell
-sudo docker run --rm --runtime=nvidia --gpus all ubuntu nvidia-smi
+docker run --rm --gpus all --pull=always ubuntu nvidia-smi
 ```
 
 The CUDA environment is complete, including also system NCCL already. The following test command:
