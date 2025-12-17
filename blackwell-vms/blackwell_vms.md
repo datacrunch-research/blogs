@@ -24,7 +24,7 @@ Blackwell architecture includes new features such as 5th-generation tensor cores
 ![memory_spaces](./imgs/memory_spaces.svg)
 
 - **2CTA (CTA Pairs) and Cluster Cooperation:** Blackwell PTX model allows [two CTAs to execute tensor core instructions that access each other’s TMEM](https://www.together.ai/blog/thunderkittens-nvidia-blackwell-gpus). This allows higher matrix operations efficiency.
-- **New optimised data types:** FP8, FP6, and FP4 data types have the highest FLOPs and memory bandwidth utilization.
+- **New optimized data types:** FP8, FP6, and FP4 data types have the highest FLOPs and memory bandwidth utilization.
 
 ## Software Stack
 
