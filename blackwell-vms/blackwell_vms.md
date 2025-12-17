@@ -65,7 +65,7 @@ This is again a fundamental requirement for highly technical teams doing both en
 
 PyTorch comes with a pre-compiled Triton bundle (`pytorch-triton` package) for the Inductor codegen. We can bypass this limitation in the latest GPU architectures (e.g., B300), while the SW support is still experimental. We replace this pre-compiled Triton with one built from source with a given commit or nightly that we know can support the target GPU architecture. This is a workaround that [SGLang has been using to have early support targeting GB300](https://github.com/sgl-project/sglang/blob/fca8e88f286867ccbfd6e484a5d6b1a1fb1599a4/docker/Dockerfile#L419), for example.
 
-If our  Triton wheels do not contemplate SM103, this error is raised when compiling:
+If our Triton wheels do not contemplate SM103, this error is raised when compiling:
 
 ```bash
 raise NoTritonConfigsError(
