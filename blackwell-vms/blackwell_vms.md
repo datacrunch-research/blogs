@@ -65,11 +65,7 @@ This is again a fundamental requirement for high technical teams doing both end-
 
 ## Annex I
 
-```shell
-Instruct how we replace with sed pre-compiled PyTorch Triton bundle (pytorch-triton ) with Triton built from source with a given commit or nightly. Important with working in new GPU architectures (e.g. SM103 → B300) to enable torch.compile (Triton codegen) before official Torch stable release.
-```
-
-PyTorch comes with a pre-compiled Triton bundle (`pytorch-triton` package). For the latest GPU architectures (e.g. B300) when the SW support still experimental and early, we can bypass this limitation. We replace this pre-compiled Triton with one built from source with a given commit or nightly that we know can support the target GPU architecture. This for example a workaround that [SGLang has been using to have early support targeting GB300](https://github.com/sgl-project/sglang/blob/fca8e88f286867ccbfd6e484a5d6b1a1fb1599a4/docker/Dockerfile#L419).
+PyTorch comes with a pre-compiled Triton bundle (`pytorch-triton` package) for the Inductor codegen. For the latest GPU architectures (e.g. B300) when the SW support still experimental and early, we can bypass this limitation. We replace this pre-compiled Triton with one built from source with a given commit or nightly that we know can support the target GPU architecture. This for example is a workaround that [SGLang has been using to have early support targeting GB300](https://github.com/sgl-project/sglang/blob/fca8e88f286867ccbfd6e484a5d6b1a1fb1599a4/docker/Dockerfile#L419).
 
 If our  Triton wheels are do not  contemplate SM103 this error is raised when compiling:
 
