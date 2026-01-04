@@ -1,24 +1,24 @@
-# Unlocking FP4: The Future of Low Precision AI on NVIDIA Blackwell
+# Unlocking NVFP4: The Journey from 32-bit to 4-bit Precision
+Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws ([1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardare choices and the tradeoffs needed to improve the performences of our training or inference workloads.
+Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase. 
+But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
-**By Verda (formerly DataCrunch)** *Insights from EurIPS Copenhagen 2025*
+In simple terms, floating point numers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values. When referrring to numerical representations on a machine there are two concepts that allows to understand the tradeoffs we are making when choising that particular representation: 
+- Precision -> refers to the sample density on the real number line for a given represntation. If the sampling is finer we have a higher precison
+- Accuracy -> measures the error between the number stored in the machine representaiton and the actual real number.
 
-The AI cloud landscape is shifting fundamentally. While legacy cloud infrastructure was built to optimize developer time, the AI-native cloud must optimize for performance, energy density, and compute costs. As models grow exponentially larger, the industry is racing to solve a critical bottleneck: how to increase compute efficiency without sacrificing accuracy.
+An example taken from the GPU MODE lecture, if we want to represent $\pi$ we can for instance have several distinct representations:
+1. `3.14` a very approximate representation of $\pi$.
+2. `3.141543` is both more precise and more accurate of `3.14`.
+3. `3.142738` which is more precise than `3.14` but at the same time less accurate than `3.14`.
 
-At our recent event at EurIPS 2025 in Copenhagen, we explored the next leap in this evolution: **Low Precision AI and the arrival of FP4 on NVIDIA Blackwell**.
+This examples shows clearly that the choice of the numerical representation affects a lot the outcome of the mod
+For more details on these concepts checkout the [GPU model lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/). 
 
-## The March Toward 1000x Performance
-Over the last decade, single-chip inference performance has increased by roughly 1000x. This massive jump wasn’t achieved through a single breakthrough but a combination of factors:
-* **Process Innovations:** The shrink from 28nm to 5nm, packing more transistors per $mm^2$.
-* **Amortized Instructions:** The evolution of Tensor Cores from FMA to HMMA, WGMMA, and UMMA.
-* **Number Representation:** The shift from FP32 to BF16, then FP8, and now FP4.
-
-With the introduction of the NVIDIA Blackwell architecture (B200/B300), we are looking at a potential 3500x increase over 15 years, largely driven by the unlocking of 4-bit floating point (FP4) precision.
-
-## Why Precision Matters: The Finite Reality
-To understand why FP4 is revolutionary, we have to look at how computers represent numbers. The real number line allows for infinite precision, but silicon and memory are finite. We must sample the real line using "floating point" representations, which consist of three bit fields:
-1.  **Sign:** Positive or negative.
-2.  **Exponent:** The dynamic range (which power of 2 is sampled).
-3.  **Mantissa:** The precision (samples between powers of two).
+The real number line allows for infinite precision, but silicon and memory are finite. Using a floating p   oint representation we can sample the real line and represent it using three bit fields:
+1.  Sign: Positive or negative.
+2.  Exponent: The dynamic range (which power of 2 is sampled).
+3.  Mantissa: The precision (samples between powers of two).
 
 The mathematical representation is defined as:
 
