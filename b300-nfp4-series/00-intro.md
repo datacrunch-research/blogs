@@ -93,7 +93,7 @@ FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard f
 #### FP8
 #### Microscaling
 
-![]()
+![](figures/fp_summary.png)
 #### NVFP4
 
 <!--
