@@ -89,9 +89,19 @@ N = 0.10000.1001001000
   = 3.140625
 ```
 
+
+#### `bfloat16`
 FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard for FP arithmetic in DL for many years until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa, `E5M10 -> E8M7`. This format is a clever way to get the best of both worlds: faster training with enough range to handle large values that may otherwise lead to numerical instabilities during the training phase of the models.
+<p align="center">
+  <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
+</p>
+
 
 #### FP8
+As model sizes and training throughput demands continued to grow, BF16—while robust—became increasingly limited by memory bandwidth and compute density, motivating the transition toward even lower-precision formats such as FP8.
+FP8 reduces floating-point representations to 8 bits and is typically implemented in two complementary formats: E4M3, which prioritizes precision, and E5M2, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic—two critical factors for scaling large-model training.  
+![](figures/deepseek.png)
+However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (E4M3 vs. E5M2), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence. In practice, FP8 shifts part of the complexity from hardware to software, requiring tighter coordination between kernels, scaling logic, and model architecture.
 #### Microscaling
 
 ![](figures/fp_summary.png)
