@@ -3,6 +3,8 @@ Over the past decade, we have seen a fascinating evolution and research going on
 Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase. 
 But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
+![](figures/timeline.png)
+
 In simple terms, floating point numers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values. When referrring to numerical representations on a machine there are two concepts that allows to understand the tradeoffs we are making when choising that particular representation: 
 - Precision -> refers to the sample density on the real number line for a given represntation. If the sampling is finer we have a higher precison
 - Accuracy -> measures the error between the number stored in the machine representaiton and the actual real number.
@@ -88,9 +90,13 @@ N = 0.10000.1001001000
 
 FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard for FP arithmetic in DL for many years until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa, `E5M10 -> E8M7`. This format is a clever way to get the best of both worlds: faster training with enough range to handle large values that may otherwise lead to numerical instabilities during the training phase of the models.
 
+#### FP8
+#### Microscaling
 
+![]()
+#### NVFP4
 
-
+<!--
 ## Introducing NVFP4: Efficiency Without Compromise
 NVFP4 is a 4-bit format consisting of **1 sign bit, 2 exponent bits, and 1 mantissa bit (E2M1)**.
 
@@ -99,7 +105,7 @@ The immediate challenge with 4-bit precision is the limited number of representa
 ### The Secret Sauce: Block Scaling
 To solve this, NVFP4 utilizes **Block Scaling**. Instead of scaling the entire tensor broadly, scaling factors are applied to small blocks of elements.
 
-While the Open Compute Project (OCP) MXFP4 specification uses a block size of 32 elements, NVIDIA’s NVFP4 uses a finer granularity of **16 elements**.
+While the Open Compute Project (OCP) MXFP4 specification uses a block size of 32 elements, NVIDIA's NVFP4 uses a finer granularity of **16 elements**.
 * **Smaller Blocks:** A block size of 16 allows the format to better capture outliers.
 * **Higher Accuracy:** This minimizes the number of values quantized to zero, maintaining model fidelity.
 
@@ -129,6 +135,7 @@ NVFP4 on Blackwell represents the next step. By combining the E2M1 format with 1
 
 At Verda, we are building the AI-native cloud to support these next-generation workloads, ensuring that infrastructure keeps pace with the rapid evolution of algorithmic efficiency.
 
+-->
 
 
 ---- 
