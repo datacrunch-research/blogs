@@ -7,6 +7,8 @@ In simple terms, floating point numers is a way of representing real number on a
 - Precision -> refers to the sample density on the real number line for a given represntation. If the sampling is finer we have a higher precison
 - Accuracy -> measures the error between the number stored in the machine representaiton and the actual real number.
 
+![](figures/real_number.png)
+
 An example taken from the GPU MODE lecture, if we want to represent $\pi$ we can for instance have several distinct representations:
 1. `3.14` a very approximate representation of $\pi$.
 2. `3.141543` is both more precise and more accurate of `3.14`.
@@ -16,15 +18,59 @@ This examples shows clearly that the choice of the numerical representation affe
 For more details on these concepts checkout the [GPU model lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/). 
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a floating p   oint representation we can sample the real line and represent it using three bit fields:
-1.  Sign: Positive or negative.
-2.  Exponent: The dynamic range (which power of 2 is sampled).
-3.  Mantissa: The precision (samples between powers of two).
+1.  Sign (S): Positive or negative.
+2.  Exponent (E): The dynamic range (which power of 2 is sampled).
+3.  Mantissa (M): The precision (samples between powers of two).
 
 The mathematical representation is defined as:
 
-$$N_{10} = (-1)^{S} \times 1.M_{10} \times 2^{E_{10} - bias}$$
+$$
+\begin{equation}
+\begin{aligned}
+N = (-1)^{S} \times 1.M \times 2^{E - bias}\\
+\text{where } \text{bias} = 2^{E_\text{max} - 1} - 1
+\end{aligned}
+\end{equation}
+$$
+
+Let's break down the formula above. The floating point representation uses 1 bit for the sign (`S`) which determines if the number is positive `S = 0` or negative `S = 1`.  
+The exponent (`E`) is an integer that represents the power of 2 that is adjusted using the bias term and multiplied by the mantissa (`M`). The exponent gives us the dynamic range of the number we can represent, aka which slice of the real number line we are sampling.  
+The mantissa (`M`) or significand is a binary number that represents the precision of the number we are representing, if the exponent is giving us the scale, the mantissa on the other hand is telling us which sample in we are sampling in the real number.  
+[Further details on the floating point representation are discussed in the appendix of the blogpost](#appendix-a-floating-point-representation)
+
+
+The Floating Point 32 together with FP64 are the most common representations used in engineering and scientific applications. Aside some corner cases requiring higher precisions, historically, deep learning relied on FP32 (32-bit). 
+FP32 is a 32-bit representation (also known as single precision) and uses E8M23. 8 bits are used for the exponent while 23 bits for the mantissa.  
+Over time, both industry and academia realized that these models are surprisingly resilient to noise, allowing to move to FP16. This shift to 16 bits halves memory footprint and increases the performance of the models.  
+Let's break down some concrete example with FP16. This format uses E5M10. 5 bits are used for the exponent while 10 bits for the mantissa. We want to represent the number `3.14`, but we can't have infinite precision so the number we will end up representing will be the closest one to `3.14` which is `3.140625`. 
+Looking at the bits will self-explain why:
+```
+3.14 ~ 3.140625 = 0.10000.1001001000 (binary)
+                = 0x4248 (in hexadecimal)
+```
+
+- `S=0`: the number is positive,  
+- `E=10000`:  exponent is 16 in base 10 ($2^4$), but it's adjusted with the bias term `bias=15`, so the actual exponent is $16 - 15 = 1$.
+- `M=1001001000`: the mantissa is the binary representation of `3.140625`.
+
+If we plug this values into equation (1) we get:
+
+$$
+\begin{align}
+N &= (-1)^{0} \times 1.(1001001000)_2 \times 2^{(10000)_2 - 15} =\\
+&= 1 \times 1.1001001000 \times 2^{1 - 15} =\\
+\end{align}
+$$
+
+ The sign bit is `S = 0`, the exponent is `E = 1000`, and     the mantissa is `M = 140625`.
+```
+```
+
+TODO: explain why we need the bias term and how it works.
 
 Historically, deep learning relied on FP32 (32-bit). Over time, the industry realized that deep learning models are surprisingly resilient to noise, allowing us to move to FP16 and BF16 (2016-2017). By 2022, the Hopper architecture introduced FP8. Now, Blackwell is pushing the boundary to **NVFP4**.
+
+FP-32 uses 1 bit for the sign, 8 bits for the exponent and 23 bits for the mantissa (E8M23, E -> exponent, M -> mantissa). This 
 
 ## Introducing NVFP4: Efficiency Without Compromise
 NVFP4 is a 4-bit format consisting of **1 sign bit, 2 exponent bits, and 1 mantissa bit (E2M1)**.
@@ -44,7 +90,7 @@ Training in FP4 requires a sophisticated "recipe" to ensure convergence. The Bla
 1.  **2D Scaling:** Scaling factors are applied row-wise and column-wise to maximize dynamic range.
 2.  **Stochastic Rounding (SR):** Unlike "nearest" rounding, SR rounds probabilistically. The formula preserves the cexpected value of the number:
 
-$$\mathbb{E}\[\text{Round}(x)\] = x$$ 
+$$\mathbb{E}\left[\text{Round}(x)\right] = x$$
 $$
 \text{Round}(x) = 
 \begin{cases} 
@@ -67,3 +113,8 @@ At Verda, we are building the AI-native cloud to support these next-generation w
 
 
 ---- 
+### Appendix A: Floating Point Representation
+#### TODO
+Add more details on the floating point representation and the bias term.
+bias term
+the fact the first bit is always 1 and introducing the rest of the things from the GPU MODE lecture.    
