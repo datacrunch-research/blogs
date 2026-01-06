@@ -1,5 +1,5 @@
 # Unlocking NVFP4: The Journey from 32-bit to 4-bit Precision
-Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws ([1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardare choices and the tradeoffs needed to improve the performences of our training or inference workloads.
+Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws (see the papers [1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardare choices and the tradeoffs needed to improve the performences of our training or inference workloads.
 Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase. 
 But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
@@ -57,20 +57,39 @@ If we plug this values into equation (1) we get:
 
 $$
 \begin{align}
-N &= (-1)^{0} \times 1.(1001001000)_2 \times 2^{(10000)_2 - 15} =\\
-&= 1 \times 1.1001001000 \times 2^{1 - 15} =\\
+N &= (-1)^{0} \times (1.1001001000)_2 \times 2^{(10000)_2 - 15} =\\
+&= 1 \times (1.1001001000)_2 \times 2^{1} = \\
+&= (1.1001001000)_2 \times 2
 \end{align}
 $$
 
- The sign bit is `S = 0`, the exponent is `E = 1000`, and     the mantissa is `M = 140625`.
+Looking closer at the mantissa we have:
 ```
+M = (1.1001001000)_2
+```
+The first bit is implicitly stored and since it's always 1
+$$
+\begin{align*}
+(1.1001001000)_2 &= 1 + \frac{1}{2} + \frac{0}{4} + \frac{0}{8} + \frac{1}{16} + \frac{0}{32} + \frac{0}{64} + \frac{1}{128} + \frac{0}{256} + \frac{0}{512} =\\ 
+&= 1 + \frac{1}{2} + \frac{1}{16} + \frac{1}{128} =\\
+&= 1 + 0.5 + 0.0625 + 0.0078125 =\\
+&= (1.5625)_{10}
+\end{align*}
+$$
+
+Putting all together we have:
+```
+N = 0.10000.1001001000 
+  = (-1)^0 * (1.1001001000)_2 * 2^((10000)_2 - 15) 
+  = (-1)^0 * 1.5625 * 2^(16-15) =
+  = 1 * 1.5625 * 2^1
+  = 3.140625
 ```
 
-TODO: explain why we need the bias term and how it works.
+FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard for FP arithmetic in DL for many years until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa, `E5M10 -> E8M7`. This format is a clever way to get the best of both worlds: faster training with enough range to handle large values that may otherwise lead to numerical instabilities during the training phase of the models.
 
-Historically, deep learning relied on FP32 (32-bit). Over time, the industry realized that deep learning models are surprisingly resilient to noise, allowing us to move to FP16 and BF16 (2016-2017). By 2022, the Hopper architecture introduced FP8. Now, Blackwell is pushing the boundary to **NVFP4**.
 
-FP-32 uses 1 bit for the sign, 8 bits for the exponent and 23 bits for the mantissa (E8M23, E -> exponent, M -> mantissa). This 
+
 
 ## Introducing NVFP4: Efficiency Without Compromise
 NVFP4 is a 4-bit format consisting of **1 sign bit, 2 exponent bits, and 1 mantissa bit (E2M1)**.
