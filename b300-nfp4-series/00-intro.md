@@ -68,6 +68,7 @@ Looking closer at the mantissa we have:
 M = (1.1001001000)_2
 ```
 The first bit is implicitly stored and since it's always 1
+
 $$
 \begin{align*}
 (1.1001001000)_2 &= 1 + \frac{1}{2} + \frac{0}{4} + \frac{0}{8} + \frac{1}{16} + \frac{0}{32} + \frac{0}{64} + \frac{1}{128} + \frac{0}{256} + \frac{0}{512} =\\ 
