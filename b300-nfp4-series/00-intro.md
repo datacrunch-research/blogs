@@ -1,32 +1,35 @@
-# Unlocking NVFP4: The Journey from 32-bit to 4-bit Precision
-Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws (see the papers [1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardware choices and the tradeoffs needed to improve the performance of our training or inference workloads.
-Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase. 
+# Unlocking NVFP4: How we got from 32-bit to 4-bit Precision
+Over the past decade, AI models are increasingly using lower precision for training and inference. 
+
+
+
+The focus on this topic has become more and more important as following scaling laws (see the papers ["Scaling Laws for Neural Language Models"](https://arxiv.org/abs/2001.08361) and ["Training Compute-Optimal Large Language Models"](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. 
+
+This bet was also backed by another bet on the accelerators hardware design (like GPUs and TPUs). To fully understand and exploit the performances promised by the hardware vendors, it is essential to understand the underlying hardware choices and the tradeoffs needed to improve the performance of our training or inference workloads.  
+Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase.  
 But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
 ![](figures/timeline.png)
 
-In simple terms, floating point numbers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values. 
-
-
-When referring to numerical representations on a machine, we have always to keep in mind that we are dealing with a finite number of bits. To understand the tradeoffs, we must disingwish between two concepts that depend on how we allocate the bits of the representation:
-- Dynamic range, controlled by the exponent (E) bits determines the scale 
-When referrring to numerical representations on a machine there are two concepts that allows to understand the tradeoffs we are making when choising that particular representation: 
-- Precision -> refers to the sample density on the real number line for a given represntation. If the sampling is finer we have a higher precison
-- Accuracy -> measures the error between the number stored in the machine representaiton and the actual real number.
+In simple terms, floating point numbers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
+When referring to numerical representations on a machine, we have always to keep in mind that we are dealing with a finite number of bits. To understand the tradeoffs, we must disingwish between three concepts that depend on how we allocate the bits of the representation:
+- **Dynamic range**, controlled by the **exponent** (E) bits determines the scale of the number we are trying to represent, aka how large or how small a number can be, e.g. from $10^{-45}$ to $10^{38}$. With more E bits we can represent a wider range, reducing the risk of overflow or underflow.
+- **Precision**, controlled by the **mantissa** (M) bits and refers to the density of samples on the real number line $\mathbb{R}$.
+- **Accuracy**, which measures the error between the stored number in the chose representaiton and the actual real number.
 
 ![](figures/real_number.png)
 
-An example taken from the GPU MODE lecture, if we want to represent $\pi$ we can for instance have several distinct representations:
-1. `3.14` a very approximate representation of $\pi$.
+As an example if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
+1. `3.14` a very crude approximation of $\pi$.
 2. `3.141543` is both more precise and more accurate than `3.14`.
-3. `3.142738` which is more precise than `3.14` but at the same time less accurate than `3.14`.
+3. `3.142738` which is more precise than `3.14` but at the same time less accurate than `3.14`. 
+ 
+This simple example shows clearly that the choice of the numerical representation affects a lot the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
 
-This examples shows clearly that the choice of the numerical representation affects a lot the outcome of the mod
-For more details on these concepts checkout the [GPU model lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/). 
-The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation we can sample the real line and represent it using three bit fields:
-1.  Sign (S): Positive or negative.
-2.  Exponent (E): The dynamic range (which power of 2 is sampled).
-3.  Mantissa (M): The precision (samples between powers of two).
+The real number line allows for infinite precision, but silicon and memory are finite. Using a FP representation, we can sample the real line and represent it using three bit fields:
+1.  **Sign (S):** Positive or negative.
+2.  **Exponent (E):** The dynamic range (which power of 2 is used).
+3.  **Mantissa (M):** The precision (samples between powers of two).
 
 The mathematical representation is defined as:
 
@@ -77,7 +80,7 @@ The first bit is implicitly stored and since it's always 1
 
 $$
 \begin{align*}
-(1.1001001000)_2 &= 1 + \frac{1}{2} + \frac{0}{4} + \frac{0}{8} + \frac{1}{16} + \frac{0}{32} + \frac{0}{64} + \frac{1}{128} + \frac{0}{256} + \frac{0}{512} =\\ 
+(1.1001001000)_2 &= 1 + \frac{1}{2} + \frac{0}{4} + \frac{0}{8} + \frac{1}{16} + \frac{0}{32} + \frac{0}{64} + \frac{1}{128} + \frac{0}{256} + \frac{0}{512} + \frac{0}{1024}=\\ 
 &= 1 + \frac{1}{2} + \frac{1}{16} + \frac{1}{128} =\\
 &= 1 + 0.5 + 0.0625 + 0.0078125 =\\
 &= (1.5703125)_{10}
@@ -93,6 +96,12 @@ N = 0.10000.1001001000
   = 3.140625
 ```
 
+If we took instead the two clostest representable FP numbers we would have got:
+```
+N_{+1} = 0.10000.1001001001 = 1 * 1,5712890625 * 2 = 3,142578125
+N      = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.14
+N_{-1} = 0.10000.1001000111 = 1 * 1,5693359375 * 2 = 3,138671875
+```
 
 #### `bfloat16`
 FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard for FP arithmetic in DL for many years until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa, `E5M10 -> E8M7`. This format is a clever way to get the best of both worlds: faster training with enough range to handle large values that may otherwise lead to numerical instabilities during the training phase of the models.
@@ -104,12 +113,87 @@ FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard f
 #### FP8
 As model sizes and training throughput demands continued to grow, BF16—while robust—became increasingly limited by memory bandwidth and compute density, motivating the transition toward even lower-precision formats such as FP8.
 FP8 reduces floating-point representations to 8 bits and is typically implemented in two complementary formats: E4M3, which prioritizes precision, and E5M2, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic—two critical factors for scaling large-model training.  
-![](figures/deepseek.png)
 However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (E4M3 vs. E5M2), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence. In practice, FP8 shifts part of the complexity from hardware to software, requiring tighter coordination between kernels, scaling logic, and model architecture.
-#### Microscaling
+Moving to FP8 requires a sophisticated orchestration of different numerical formats to balance speed and stability. In early 2025 a lot of buzz around DeepSeek was also due to them releasing their training recipe for FP8 that they used to train their DeepSeek-V3 base model.
+In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Since not all tensors in the training loop are created equal, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
+
+![](figures/deepseek.png)
+*Figure: DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
+
+As illustrated in the figure above from their technical report, DeepSeek adopt different FP8 variants depending on the operation:
+
+* **Weights (FWD/BWD):** Utilizing FP8 E4M3, since weights require finer precision the extra mantissa bit helps in more accurate computations.
+* **Activations (FWD):** Utilizing FP8 E5M2, they often contain outliers that push the boundaries of dynamic range; the extra exponent bit here prevents overflows that would destabilize training.
+* **Master Weights and Optimizer States:** they kept in high precision (**FP32**) to ensure accurate gradient accumulation and stable convergence over long training runs.
+
+Furthermore, to handle outliers that even E5M2 can't catch, DeepSeek employs a fine-grained quantization scaling blocks of FP8 elements rather than whole tensors. This software-heavy approach to managing numerical instability highlights the immense challenges of scaling low-precision training.
+
+It also sets the stage for the next frontier: what if the hardware itself could handle this granularity efficiently, pushing precision even lower?
+
+#### Microscaling (MX) Formats
+While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the industry's hunger for efficiency pushes us towards even smaller formats like 6-bit or 4-bit. However, at these low precisions, standard "per-tensor" scaling (used in INT8) breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively crushing all smaller values to zero and destroying model accuracy.
+
+To solve this, a consortium of tech giants (including AMD, Arm, Intel, NVIDIA, and Qualcomm) aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
+
+The core idea of Microscaling is to move from per-tensor to per-block scaling.
+Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements). Each block gets its own shared scale (exponent), while the individual elements within the block share the low-precision mantissa.
+
+How it works? (E.g., MXFP4):
+1.  **Block grouping:** Elements are grouped into blocks of $k$ (e.g., $k=32$).
+2.  **Shared Scale:** The hardware calculates the maximum absolute value in that block to determine a shared 8-bit exponent.
+3.  **Local Quantization:** The individual elements are then quantized to 4 bits relative to that local shared scale.
+
+This approach isolates the impact of outliers. If a massive value exists in the tensor, it only affects the scale of its specific block of 32 neighbors, leaving the rest of the model's weights untouched and precise. This "compartmentalization" of numerical noise is the key breakthrough that allows training to survive at 4-bit precision.
 
 ![](figures/fp_summary.png)
+
 #### NVFP4
+We finally arrive at the frontier: NVFP4. Introduced with the Blackwell architecture, this format represents the most aggressive step yet in the quest for efficiency.
+NVFP4 is a 4-bit floating point format (E2M1) composed of:
+* Sign: 1 bit
+* Exponent: 2 bits
+* Mantissa: 1 bit (plus one implicit)
+
+Wait, isn't 4 bits too little? If you calculate the number of unique values representable with 4 bits, you get only 16 distinct values. Trying to capture the nuance of a trillion-parameter model with just 16 values sounds impossible. And it would be, without a clever combination of hardware level [TODO: check this claim] block- and tensor-level scaling.
+
+While the OCP MX specification typically suggests a block size of 32 elements, NVIDIA chose a finer granularity for Blackwel of 16 elements.
+By calculating the shared scale factor over these fewer elements, NVFP4 "confines" outliers even more tightly than the standard. This means a single sharp spike in activation values distorts a smaller neighborhood, preserving the fidelity of the surrounding weights.
+
+![](figures/nvfp4.png)
+*Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+
+
+Hardware support is only half the story, in fact, training a model in 4-bit precision without it diverging into noise requires a specific algorithmic recipe that has been for instance showcased in the paper from NVIDIA ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149) NVIDIA Blackwell implements this through a specialized pipeline:
+
+1. **2D Block Scaling**  
+   Scaling isn't just applied along one dimension. Factors are calculated both **row-wise** and **column-wise** for the matrix multiplication. This maximizes the effective dynamic range, allowing the tiny 4-bit payload to represent values that would otherwise be out of bounds.
+
+2. **Random Hadamard Transform (RHT)**  
+   One of the biggest enemies of quantization is "outlier features"—specific neurons that consistently fire with massive values. These outliers can wreck the quantization scale for their entire block.
+Blackwell can apply a Random Hadamard Transform *before* quantization. This mathematical operation "smears" or spreads the outlier information across the entire vector.
+    * Before RHT: One massive value, many small ones. (Hard to quantize).
+    * After RHT: Many medium values. (Easy to quantize efficiently).
+
+3. **Stochastic Rounding (SR)**  
+   When you have very few bits, standard "nearest" rounding is dangerous because it creates a systematic bias (always rounding down 0.4 to 0 accumulates a massive error over billions of operations).
+   NVFP4 uses **Stochastic Rounding**, which rounds probabilistically based on the distance to the next number. Where  is the fractional part of . This ensures that **on average**, the expected value of the rounded number equals the original number allowing for the gradient descent to converge correctly over time. In formulas, we have,
+   
+$$\mathbb{E}\left[\text{Round}(x)\right] = x$$
+
+$$
+\text{Round}(x) = 
+\begin{cases} 
+    \lfloor x \rfloor, & \text{w/ prob. } 1-p \\ 
+    \lceil x \rceil, & \text{w/ prob. } 
+\end{cases}
+$$
+$$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
+
+Putting all together, we get a full working scheme that closely resemble the one from DeepSeekV3 shown earlier:
+
+![](figures/nvfp4_training.png)
+*Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+
 
 <!--
 ## Introducing NVFP4: Efficiency Without Compromise
@@ -130,16 +214,7 @@ Training in FP4 requires a sophisticated "recipe" to ensure convergence. The Bla
 1.  **2D Scaling:** Scaling factors are applied row-wise and column-wise to maximize dynamic range.
 2.  **Stochastic Rounding (SR):** Unlike "nearest" rounding, SR rounds probabilistically. The formula preserves the cexpected value of the number:
 
-$$\mathbb{E}\left[\text{Round}(x)\right] = x$$
-$$
-\text{Round}(x) = 
-\begin{cases} 
-    \lfloor x \rfloor, & \text{w/ prob. } 1-p \\ 
-    \lceil x \rceil, & \text{w/ prob. } 
-\end{cases}
-$$
 
-$$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
 
 3.  **Random Hadamard Transforms:** This technique spreads outlier information across the vector, preventing specific weights from dominating the quantization error.
 
