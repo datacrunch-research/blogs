@@ -1,11 +1,16 @@
 # Unlocking NVFP4: The Journey from 32-bit to 4-bit Precision
-Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws (see the papers [1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardare choices and the tradeoffs needed to improve the performences of our training or inference workloads.
+Over the past decade, we have seen a fascinating evolution and research going on in the field of low precision computing for AI models. The focus on this topic has become more and more important as following scaling laws (see the papers [1](https://arxiv.org/abs/2001.08361),[2](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. This bet was also backed by another bet on the GPU, TPUs and other accelerators archiecture design. To fully understand and exploit the performances promised by the hardware vendors it is essential to understand the underlying hardware choices and the tradeoffs needed to improve the performance of our training or inference workloads.
 Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase. 
 But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
 ![](figures/timeline.png)
 
-In simple terms, floating point numers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values. When referrring to numerical representations on a machine there are two concepts that allows to understand the tradeoffs we are making when choising that particular representation: 
+In simple terms, floating point numbers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values. 
+
+
+When referring to numerical representations on a machine, we have always to keep in mind that we are dealing with a finite number of bits. To understand the tradeoffs, we must disingwish between two concepts that depend on how we allocate the bits of the representation:
+- Dynamic range, controlled by the exponent (E) bits determines the scale 
+When referrring to numerical representations on a machine there are two concepts that allows to understand the tradeoffs we are making when choising that particular representation: 
 - Precision -> refers to the sample density on the real number line for a given represntation. If the sampling is finer we have a higher precison
 - Accuracy -> measures the error between the number stored in the machine representaiton and the actual real number.
 
@@ -13,13 +18,12 @@ In simple terms, floating point numers is a way of representing real number on a
 
 An example taken from the GPU MODE lecture, if we want to represent $\pi$ we can for instance have several distinct representations:
 1. `3.14` a very approximate representation of $\pi$.
-2. `3.141543` is both more precise and more accurate of `3.14`.
+2. `3.141543` is both more precise and more accurate than `3.14`.
 3. `3.142738` which is more precise than `3.14` but at the same time less accurate than `3.14`.
 
 This examples shows clearly that the choice of the numerical representation affects a lot the outcome of the mod
 For more details on these concepts checkout the [GPU model lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/). 
-
-The real number line allows for infinite precision, but silicon and memory are finite. Using a floating p   oint representation we can sample the real line and represent it using three bit fields:
+The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation we can sample the real line and represent it using three bit fields:
 1.  Sign (S): Positive or negative.
 2.  Exponent (E): The dynamic range (which power of 2 is sampled).
 3.  Mantissa (M): The precision (samples between powers of two).
@@ -76,7 +80,7 @@ $$
 (1.1001001000)_2 &= 1 + \frac{1}{2} + \frac{0}{4} + \frac{0}{8} + \frac{1}{16} + \frac{0}{32} + \frac{0}{64} + \frac{1}{128} + \frac{0}{256} + \frac{0}{512} =\\ 
 &= 1 + \frac{1}{2} + \frac{1}{16} + \frac{1}{128} =\\
 &= 1 + 0.5 + 0.0625 + 0.0078125 =\\
-&= (1.5625)_{10}
+&= (1.5703125)_{10}
 \end{align*}
 $$
 
@@ -84,8 +88,8 @@ Putting all together we have:
 ```
 N = 0.10000.1001001000 
   = (-1)^0 * (1.1001001000)_2 * 2^((10000)_2 - 15) 
-  = (-1)^0 * 1.5625 * 2^(16-15) =
-  = 1 * 1.5625 * 2^1
+  = (-1)^0 * 1.5703125 * 2^(16-15) =
+  = 1 * 1.5703125 * 2^1
   = 3.140625
 ```
 
