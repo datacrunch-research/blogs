@@ -13,12 +13,12 @@ provider "verda" {}
 
 resource "verda_ssh_key" "tf_ssh" {
   name       = "tf-ssh"
-  public_key = file("/mnt/cephfs/dc/rodri/IaC_blog/rodrimacos_25519.pub")
+  public_key = file("/mnt/cephfs/dc/rodri/blogs/verda_terraform/rodrimacos_25519.pub")
 }
 
 resource "verda_startup_script" "init_vm" {
   name   = "init-vm"
-  script = file("scripts/vm_init.sh")
+  script = file("vm_scripts/vm_init.sh")
 }
 
 resource "verda_volume" "tf_volume" {
