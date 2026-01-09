@@ -1,15 +1,9 @@
 # Unlocking NVFP4: How we got from 32-bit to 4-bit Precision
-Over the past decade, AI models are increasingly using lower precision for training and inference. 
+Over the past decade, AI models have increasingly shifted toward lower precision for both training and inference. As Moore’s Law nears its physical limits and transistor density plateaus, chip designers must find new ways to boost FLOPs with each yearly release. Adopting lower-precision data types has become a primary strategy; it not only accelerates computation but also significantly reduces the memory footprint required for model weights, activations, and gradients.
 
-
-
-The focus on this topic has become more and more important as following scaling laws (see the papers ["Scaling Laws for Neural Language Models"](https://arxiv.org/abs/2001.08361) and ["Training Compute-Optimal Large Language Models"](https://arxiv.org/abs/2203.15556)) models have been scaled up exponentially. 
-
-This bet was also backed by another bet on the accelerators hardware design (like GPUs and TPUs). To fully understand and exploit the performances promised by the hardware vendors, it is essential to understand the underlying hardware choices and the tradeoffs needed to improve the performance of our training or inference workloads.  
-Reducing the number of bits needed to represent the model weights, activations, and gradients impacts directly the design choices for the chip, but can be beneficial in terms of speed, energy efficiency and memory and communications bandwidth. Why so? Using less bits means that less memory is needed to store the model, but also the amount of data that gets tranferred over multiple GPUs is lower making communications faster. Computing is also faster as the data is smaller and the operations are less expensive. Adding all these together has some prices to pay however, since there is no free lunch and the researchers had to find some ways to mitigate the accuracy loss and the impact of the model performance at inference time or instabilities during the training phase.  
-But before delving into that, let's first have a look at what is a floating point number that we will talk a lot about in this series of posts.
 
 ![](figures/timeline.png)
+Figure 1: [TODO: can you write a caption here and reference it in the text. This figure is very complex]
 
 In simple terms, floating point numbers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
 When referring to numerical representations on a machine, we have always to keep in mind that we are dealing with a finite number of bits. To understand the tradeoffs, we must disingwish between three concepts that depend on how we allocate the bits of the representation:
@@ -18,6 +12,7 @@ When referring to numerical representations on a machine, we have always to keep
 - **Accuracy**, which measures the error between the stored number in the chose representaiton and the actual real number.
 
 ![](figures/real_number.png)
+[TODO: Can you add a caption here, the figure will be a bit weird in markdown as different sizes so not sure if you can split it up. Maybe just keep the number line the inifinite point is made below.]
 
 As an example if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
 1. `3.14` a very crude approximation of $\pi$.
@@ -131,7 +126,7 @@ Furthermore, to handle outliers that even E5M2 can't catch, DeepSeek employs a f
 It also sets the stage for the next frontier: what if the hardware itself could handle this granularity efficiently, pushing precision even lower?
 
 #### Microscaling (MX) Formats
-While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the industry's hunger for efficiency pushes us towards even smaller formats like 6-bit or 4-bit. However, at these low precisions, standard "per-tensor" scaling (used in INT8) breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively crushing all smaller values to zero and destroying model accuracy.
+While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads towards even smaller formats like 6-bit or 4-bit. However, at these low precisions, standard "per-tensor" scaling (used in INT8) breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively crushing all smaller values to zero and destroying model accuracy.
 
 To solve this, a consortium of tech giants (including AMD, Arm, Intel, NVIDIA, and Qualcomm) aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
 
@@ -146,15 +141,16 @@ How it works? (E.g., MXFP4):
 This approach isolates the impact of outliers. If a massive value exists in the tensor, it only affects the scale of its specific block of 32 neighbors, leaving the rest of the model's weights untouched and precise. This "compartmentalization" of numerical noise is the key breakthrough that allows training to survive at 4-bit precision.
 
 ![](figures/fp_summary.png)
+[TODO: Add a caption here]
 
 #### NVFP4
-We finally arrive at the frontier: NVFP4. Introduced with the Blackwell architecture, this format represents the most aggressive step yet in the quest for efficiency.
+The NVFP4 format introduced with the Blackwell architecture represents the most aggressive step yet in low bit representation.
 NVFP4 is a 4-bit floating point format (E2M1) composed of:
 * Sign: 1 bit
 * Exponent: 2 bits
 * Mantissa: 1 bit (plus one implicit)
 
-Wait, isn't 4 bits too little? If you calculate the number of unique values representable with 4 bits, you get only 16 distinct values. Trying to capture the nuance of a trillion-parameter model with just 16 values sounds impossible. And it would be, without a clever combination of hardware level [TODO: check this claim] block- and tensor-level scaling.
+With only 16 unique values available in a 4-bit representation, careful block- and tensor-level scaling becomes critical to preventing quantization errors.
 
 While the OCP MX specification typically suggests a block size of 32 elements, NVIDIA chose a finer granularity for Blackwel of 16 elements.
 By calculating the shared scale factor over these fewer elements, NVFP4 "confines" outliers even more tightly than the standard. This means a single sharp spike in activation values distorts a smaller neighborhood, preserving the fidelity of the surrounding weights.
@@ -176,7 +172,7 @@ Blackwell can apply a Random Hadamard Transform *before* quantization. This math
 
 3. **Stochastic Rounding (SR)**  
    When you have very few bits, standard "nearest" rounding is dangerous because it creates a systematic bias (always rounding down 0.4 to 0 accumulates a massive error over billions of operations).
-   NVFP4 uses **Stochastic Rounding**, which rounds probabilistically based on the distance to the next number. Where  is the fractional part of . This ensures that **on average**, the expected value of the rounded number equals the original number allowing for the gradient descent to converge correctly over time. In formulas, we have,
+   NVFP4 uses **Stochastic Rounding**, which rounds probabilistically based on the distance to the next number. This ensures that **on average**, the expected value of the rounded number equals the original number allowing for the gradient descent to converge correctly over time. In formulas, we have,
    
 $$\mathbb{E}\left[\text{Round}(x)\right] = x$$
 
@@ -193,39 +189,6 @@ Putting all together, we get a full working scheme that closely resemble the one
 
 ![](figures/nvfp4_training.png)
 *Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
-
-
-<!--
-## Introducing NVFP4: Efficiency Without Compromise
-NVFP4 is a 4-bit format consisting of **1 sign bit, 2 exponent bits, and 1 mantissa bit (E2M1)**.
-
-The immediate challenge with 4-bit precision is the limited number of representable values—essentially 16 values to represent complex model weights. If you simply quantized a standard distribution to 4 bits, you would lose significant accuracy, particularly with outliers.
-
-### The Secret Sauce: Block Scaling
-To solve this, NVFP4 utilizes **Block Scaling**. Instead of scaling the entire tensor broadly, scaling factors are applied to small blocks of elements.
-
-While the Open Compute Project (OCP) MXFP4 specification uses a block size of 32 elements, NVIDIA's NVFP4 uses a finer granularity of **16 elements**.
-* **Smaller Blocks:** A block size of 16 allows the format to better capture outliers.
-* **Higher Accuracy:** This minimizes the number of values quantized to zero, maintaining model fidelity.
-
-## The NVFP4 Training Recipe
-Training in FP4 requires a sophisticated "recipe" to ensure convergence. The Blackwell architecture supports this through a specific pipeline:
-
-1.  **2D Scaling:** Scaling factors are applied row-wise and column-wise to maximize dynamic range.
-2.  **Stochastic Rounding (SR):** Unlike "nearest" rounding, SR rounds probabilistically. The formula preserves the cexpected value of the number:
-
-
-
-3.  **Random Hadamard Transforms:** This technique spreads outlier information across the vector, preventing specific weights from dominating the quantization error.
-
-## From DeepSeek V3 to the Future
-We are already seeing the industry move toward lower precision. Frontier labs like DeepSeek have successfully implemented FP8 mixed precision training, utilizing fine-grained quantization to mitigate errors caused by feature outliers.
-
-NVFP4 on Blackwell represents the next step. By combining the E2M1 format with 16-element block scaling and stochastic rounding, we can achieve the speed and memory efficiency of 4-bit compute while retaining the necessary accuracy for frontier models.
-
-At Verda, we are building the AI-native cloud to support these next-generation workloads, ensuring that infrastructure keeps pace with the rapid evolution of algorithmic efficiency.
-
--->
 
 
 ---- 
