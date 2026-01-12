@@ -1,17 +1,22 @@
 # Unlocking NVFP4: How we got from 32-bit to 4-bit Precision
+<!-- Intro -->
 Over the past decade, AI models have increasingly shifted toward lower precision for both training and inference. As Moore’s Law nears its physical limits and transistor density plateaus, chip designers must find new ways to boost FLOPs with each yearly release. Adopting lower-precision data types has become a primary strategy; it not only accelerates computation but also significantly reduces the memory footprint required for model weights, activations, and gradients.
 
-
+<!-- 
 ![](figures/timeline.png)
-Figure 1: [TODO: can you write a caption here and reference it in the text. This figure is very complex]
+Figure 1: [TODO: can you write a caption here and reference it in the text. This figure is very complex] 
+-->
 
-In simple terms, floating point numbers is a way of representing real number on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
-When referring to numerical representations on a machine, we have always to keep in mind that we are dealing with a finite number of bits. To understand the tradeoffs, we must disingwish between three concepts that depend on how we allocate the bits of the representation:
-- **Dynamic range**, controlled by the **exponent** (E) bits determines the scale of the number we are trying to represent, aka how large or how small a number can be, e.g. from $10^{-45}$ to $10^{38}$. With more E bits we can represent a wider range, reducing the risk of overflow or underflow.
+<!-- Floating Point Representation -->
+## Floating Point Representation
+In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
+One of the crucial point we have to keep in mind is that on a machine we have to deal with a fixed budget represented by the number of bits used. To understand the tradeoffs, we must disingwish between three concepts that depend on how we allocate the bits of the representation:
+- **Dynamic range**, controlled by the **exponent** (E) bits determines the scale of the number we are trying to represent, aka how large or how small a number can be (e.g. from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow.
 - **Precision**, controlled by the **mantissa** (M) bits and refers to the density of samples on the real number line $\mathbb{R}$.
 - **Accuracy**, which measures the error between the stored number in the chose representaiton and the actual real number.
 
 ![](figures/real_number.png)
+Figure 2. 
 [TODO: Can you add a caption here, the figure will be a bit weird in markdown as different sizes so not sure if you can split it up. Maybe just keep the number line the inifinite point is made below.]
 
 As an example if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
