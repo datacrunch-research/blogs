@@ -10,10 +10,10 @@ Figure 1: [TODO: can you write a caption here and reference it in the text. This
 <!-- Floating Point Representation -->
 ## Floating Point Representation
 In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
-One of the crucial point we have to keep in mind is that on a machine we have to deal with a fixed budget represented by the number of bits used. To understand the tradeoffs, we must disingwish between three concepts that depend on how we allocate the bits of the representation:
+One of the crucial point we have to keep in mind is that on a machine we have to deal with a fixed budget represented by the number of bits used. To understand the tradeoffs, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
 - **Dynamic range**, controlled by the **exponent** (E) bits determines the scale of the number we are trying to represent, aka how large or how small a number can be (e.g. from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow.
 - **Precision**, controlled by the **mantissa** (M) bits and refers to the density of samples on the real number line $\mathbb{R}$.
-- **Accuracy**, which measures the error between the stored number in the chose representaiton and the actual real number.
+- **Accuracy**, which measures the error between the stored number in the chosen representation and the actual real number.
 
 ![](figures/real_number.png)
 Figure 2. 
@@ -22,7 +22,7 @@ Figure 2.
 As an example if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
 1. `3.14` a very crude approximation of $\pi$.
 2. `3.141543` is both more precise and more accurate than `3.14`.
-3. `3.142738` which is more precise than `3.14` but at the same time less accurate than `3.14`. 
+3. `3.142738` which is more precise than `3.14` and at the same time more accurate than `3.14` (absolute error ~0.0011.. vs. ~0.0015).
  
 This simple example shows clearly that the choice of the numerical representation affects a lot the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
 
@@ -44,7 +44,8 @@ $$
 
 Let's break down the formula above. The floating point representation uses 1 bit for the sign (`S`) which determines if the number is positive `S = 0` or negative `S = 1`.  
 The exponent (`E`) is an integer that represents the power of 2 that is adjusted using the bias term and multiplied by the mantissa (`M`). The exponent gives us the dynamic range of the number we can represent, aka which slice of the real number line we are sampling.  
-The mantissa (`M`) or significand is a binary number that represents the precision of the number we are representing, if the exponent is giving us the scale, the mantissa on the other hand is telling us which sample in we are sampling in the real number.  
+The mantissa (`M`) or significand is a binary number that represents the precision of the number we are representing; if the exponent is giving us the scale, the mantissa on the other hand is telling us which sample we are taking from that slice of the real number line. 
+In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The first bit is (almost) always 1 to maximize precision. The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on. This allows the mantissa to encode fine-grained precision within the slice of the real number line determined by the exponent.
 [Further details on the floating point representation are discussed in the appendix of the blogpost](#appendix-a-floating-point-representation)
 
 
@@ -60,7 +61,7 @@ Looking at the bits will self-explain why:
 
 - `S=0`: the number is positive,  
 - `E=10000`:  exponent is 16 in base 10 ($2^4$), but it's adjusted with the bias term `bias=15`, so the actual exponent is $16 - 15 = 1$.
-- `M=1001001000`: the mantissa is the binary representation of `3.140625`.
+- `M=1001001000`: the mantissa represents the fractional part of the normalized significand. 
 
 If we plug this values into equation (1) we get:
 
@@ -96,11 +97,12 @@ N = 0.10000.1001001000
   = 3.140625
 ```
 
-If we took instead the two clostest representable FP numbers we would have got:
+If we took instead the two closest representable FP numbers we would have got:
 ```
-N_{+1} = 0.10000.1001001001 = 1 * 1,5712890625 * 2 = 3,142578125
+
+N_{+1} = 0.10000.1001001001 = 1 * 1.5712890625 * 2 = 3.142578125
 N      = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.14
-N_{-1} = 0.10000.1001000111 = 1 * 1,5693359375 * 2 = 3,138671875
+N_{-1} = 0.10000.1001000111 = 1 * 1.5693359375 * 2 = 3.138671875
 ```
 
 #### `bfloat16`
@@ -120,7 +122,7 @@ In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](h
 ![](figures/deepseek.png)
 *Figure: DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
 
-As illustrated in the figure above from their technical report, DeepSeek adopt different FP8 variants depending on the operation:
+As illustrated in the figure above from their technical report, DeepSeek adopts different FP8 variants depending on the operation:
 
 * **Weights (FWD/BWD):** Utilizing FP8 E4M3, since weights require finer precision the extra mantissa bit helps in more accurate computations.
 * **Activations (FWD):** Utilizing FP8 E5M2, they often contain outliers that push the boundaries of dynamic range; the extra exponent bit here prevents overflows that would destabilize training.
@@ -157,7 +159,7 @@ NVFP4 is a 4-bit floating point format (E2M1) composed of:
 
 With only 16 unique values available in a 4-bit representation, careful block- and tensor-level scaling becomes critical to preventing quantization errors.
 
-While the OCP MX specification typically suggests a block size of 32 elements, NVIDIA chose a finer granularity for Blackwel of 16 elements.
+While the OCP MX specification typically suggests a block size of 32 elements, NVIDIA chose a finer granularity for Blackwell of 16 elements.
 By calculating the shared scale factor over these fewer elements, NVFP4 "confines" outliers even more tightly than the standard. This means a single sharp spike in activation values distorts a smaller neighborhood, preserving the fidelity of the surrounding weights.
 
 ![](figures/nvfp4.png)
@@ -185,7 +187,7 @@ $$
 \text{Round}(x) = 
 \begin{cases} 
     \lfloor x \rfloor, & \text{w/ prob. } 1-p \\ 
-    \lceil x \rceil, & \text{w/ prob. } 
+    \lceil x \rceil, & \text{w/ prob. } p
 \end{cases}
 $$
 $$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
