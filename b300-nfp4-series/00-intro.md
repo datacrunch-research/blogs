@@ -15,14 +15,14 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 
 As an example, if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
 1. `3.141` a very crude approximation of $\pi$ that uses only 3 fractional digits in base 10.
-2. `3.141543` is both more precise and more accurate than `3.14`.
-3. `3.142738` which is more precise than `3.141` but less accurate than `3.14`, since the absolute error $|\pi - x|$ ~0.0011.. vs. ~0.0005).
+2. `3.141543` is both more precise and more accurate than `3.141`.
+3. `3.142738` which is more precise than `3.141` but less accurate than `3.141`, since the absolute error $|\pi - x|$ ~0.0011.. vs. ~0.0005).
 
 ![](figures/fp_00.png)
 **Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. The figure demonstrates how a more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 
-This simple example shows clearly that the choice of the numerical representation affects a lot the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
+This simple example shows clearly that the choice of the numerical representation greatly affects the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a FP representation, we can sample the real line and represent it using three bit fields:
 1.  **Sign (S):** Positive or negative.
@@ -50,7 +50,7 @@ In normalized floating point representation, the significand always starts with 
 The Floating Point 32 together with FP64 are the most common representations used in engineering and scientific applications. Aside some corner cases requiring higher precisions, historically, deep learning relied on FP32. 
 FP32 is a 32-bit representation, also known as single precision. In FP32, 8 bits are used for the exponent while 23 bits for the mantissa (`E8M23`).  
 Over time, both industry and academia realized that these models are surprisingly resilient to noise, allowing to move to FP16. This shift to 16 bits halves memory footprint and increases the performance of the models.  
-Let's break down some concrete example with FP16. This format uses E5M10. 5 bits are used for the exponent while 10 bits for the mantissa. Let's say we want to represent the number `3.14` using FP32. First of all we will find that we cannot represent the exact value `3.14` so the number we will end up storing will be the closest in this format which is `3.140625`. 
+Let's break down a concrete example with FP16. This format uses E5M10. 5 bits are used for the exponent while 10 bits for the mantissa. Let's say we want to represent the number `3.14` using FP16. First of all we will find that we cannot represent the exact value `3.14` so the number we will end up storing will be the closest in this format which is `3.140625`. 
 Looking at the crude bits will self-explain why:
 ```
 3.14 ~ 3.140625 = 0.10000.1001001000 (binary)
@@ -163,11 +163,11 @@ N      = 0.10000000.1001001 = 1 * 1.5703125 * 2 = 3.140625 <--- More accurate re
 N_{-1} = 0.10000000.1001000 = 1 * 1.5625 * 2 = 3.125
 ```
 
-Note that while bfloat16 results in the same representable value as FP16 for this specific example, generally bfloat16 has lower precision (7 mantissa bits vs 10) in exchange for the wider dynamic range required for training stability. This is noticeable if you check the clostest representations to `N` computed here and compare them to those from the previous section, we can see that the gap between the values is larger due to the smaller precision of `bf16` format.
+Note that while bfloat16 results in the same representable value as FP16 for this specific example, generally bfloat16 has lower precision (7 mantissa bits vs 10) in exchange for the wider dynamic range required for training stability. This is noticeable if you check the closest representations to `N` computed here and compare them to those from the previous section, we can see that the gap between the values is larger due to the smaller precision of `bf16` format.
 
 ### FP8
 As model sizes and training throughput demands continued to grow, `bfloat16` has become a limiting factor due to the heavier memory bandwidth and compute density with bigger models. This motivated the transition toward even lower-precision formats such as FP8.  
-FP8 reduces the number of bits used in the floating point repesentation to 8 and is typically implemented in two complementary formats: `E4M3`, which prioritizes precision, and `E5M2`, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic which represent two critical factors for scaling large-model training.  
+FP8 reduces the number of bits used in the floating point representation to 8 and is typically implemented in two complementary formats: `E4M3`, which prioritizes precision, and `E5M2`, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic which represent two critical factors for scaling large-model training.  
 
 However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (`E4M3` vs. `E5M2`), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence. In practice, FP8 shifts part of the complexity from hardware to software, requiring tighter coordination between kernels, scaling logic, and model architecture.
 Moving to FP8 requires a sophisticated orchestration of different numerical formats to balance speed and stability. In early 2025 a lot of buzz around DeepSeek was also due to them releasing their training recipe for FP8 that they used to train their DeepSeek-V3 base model.
@@ -180,7 +180,7 @@ As illustrated in the figure above from their technical report, DeepSeek adopts 
 
 * **Weights (FWD/BWD):** Utilizing FP8 `E4M3`, since weights require finer precision the extra mantissa bit helps in more accurate computations.
 * **Activations (FWD):** Utilizing FP8 `E5M2`, they often contain outliers that push the boundaries of dynamic range; the extra exponent bit here prevents overflows that would destabilize training.
-* **Master Weights and Optimizer States:** they kept in higher precision (FP32 and FP16) to ensure accurate gradient accumulation and stable convergence over long training runs.
+* **Master Weights and Optimizer States:** are kept in higher precision (FP32 and FP16) to ensure accurate gradient accumulation and stable convergence over long training runs.
 
 Furthermore, to handle outliers that even `E5M2` can't catch, DeepSeek employs a fine-grained quantization scaling blocks of FP8 elements rather than whole tensors. This software-heavy approach to managing numerical instability highlights the immense challenges of scaling low-precision training.
 
