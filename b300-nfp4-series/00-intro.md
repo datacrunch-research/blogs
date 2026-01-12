@@ -108,6 +108,7 @@ FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard f
 <p align="center">
   <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
 </p>
+
 **Figure 3.** *Jeff Dean's X post explaining the bfloat16 format. (Source: [X Thread by Jeff Dean on bfloat16](https://x.com/JeffDean/status/1134523127357161473))* 
 
 Let's see how `3.14` is represented in bfloat16. This format uses `E8M7`: 8 bits for the exponent (same as FP32, with `bias=127`) and 7 bits for the mantissa. The closest representable value to `3.14` in bfloat16 is `3.140625`.
@@ -173,7 +174,7 @@ Moving to FP8 requires a sophisticated orchestration of different numerical form
 In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Not all tensors in the training loop are using the same low-precision, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
 
 ![](figures/deepseek.png)
-*Figure [todo]. DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
+*Figure . DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
 
 As illustrated in the figure above from their technical report, DeepSeek adopts different FP8 variants depending on the operation:
 
@@ -212,7 +213,7 @@ While the OCP MX specification typically suggests a block size of 32 elements, N
 By calculating the shared scale factor over these fewer elements, NVFP4 "confines" outliers even more tightly than the standard. This means a single sharp spike in activation values distorts a smaller neighborhood, preserving the fidelity of the surrounding weights.
 
 ![](figures/nvfp4.png)
-**Figure [todo].** *Illustration of the compute flow for a NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4.  (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+**Figure 5.** *Illustration of the compute flow for a NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4.  (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
 Hardware support is only half the story, in fact, training a model in 4-bit precision without it diverging into noise requires a specific algorithmic recipe, as showcased in the paper from NVIDIA ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149).  
@@ -245,7 +246,7 @@ $$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
 Putting all together, we get a full working scheme that closely resembles the one from DeepSeekV3 shown earlier:
 
 ![](figures/nvfp4_training.png)
-*Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+*Figur 6.: Illustration of the NVFP4 training flow for a linear layer. Notice that all GEMMs are performed using NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
 ## Conclusions
