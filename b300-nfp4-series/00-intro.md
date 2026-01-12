@@ -22,7 +22,7 @@ As an example, if we want to represent $\pi$ we can have several distinct repres
 **Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. The figure demonstrates how a more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 
-This simple example shows clearly that the choice of the numerical representation greatly affects the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
+This simple example shows clearly that the choice of the numerical representation greatly affects the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired by the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a FP representation, we can sample the real line and represent it using three bit fields:
 1.  **Sign (S):** Positive or negative.
@@ -46,12 +46,12 @@ Let's break down the formula above:
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The first bit is (almost) always 1 to maximize precision. The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on. This allows the mantissa to encode fine-grained precision within the slice of the real number line determined by the exponent.
 
 
-### Floating Point 32 
-The Floating Point 32 together with FP64 are the most common representations used in engineering and scientific applications. Aside some corner cases requiring higher precisions, historically, deep learning relied on FP32. 
+### Floating Point 32 and FLoating Point 16
+FP32 and FP64 are the most common representations used in engineering and scientific applications. Aside from some corner cases requiring higher precision, historically, Deep Learning (DL) relied on FP32. 
 FP32 is a 32-bit representation, also known as single precision. In FP32, 8 bits are used for the exponent while 23 bits for the mantissa (`E8M23`).  
 Over time, both industry and academia realized that these models are surprisingly resilient to noise, allowing to move to FP16. This shift to 16 bits halves memory footprint and increases the performance of the models.  
 Let's break down a concrete example with FP16. This format uses E5M10. 5 bits are used for the exponent while 10 bits for the mantissa. Let's say we want to represent the number `3.14` using FP16. First of all we will find that we cannot represent the exact value `3.14` so the number we will end up storing will be the closest in this format which is `3.140625`. 
-Looking at the crude bits will self-explain why:
+Looking at the bits should make this clear:
 ```
 3.14 ~ 3.140625 = 0.10000.1001001000 (binary)
                 = 0x4248 (in hexadecimal)
@@ -61,7 +61,7 @@ Looking at the crude bits will self-explain why:
 - `E=10000`:  exponent is 16 in base 10 ($2^4$), but it's adjusted with the bias term `bias=15`, so the actual exponent is $16 - 15 = 1$.
 - `M=1001001000`: the mantissa represents the fractional part of the normalized significand. 
 
-If we plug this values into equation (1) we get:
+If we plug these values into equation (1) we get:
 
 $$
 \begin{align}
@@ -75,7 +75,7 @@ Looking closer at the mantissa we have:
 ```
 M = (1.1001001000)_2
 ```
-The first bit is implicitly stored and since it's always 1
+The first bit is implicitly stored and is always 1 for normalized numbers.
 
 $$
 \begin{align*}
@@ -95,9 +95,8 @@ N = 0.10000.1001001000
   = 3.140625
 ```
 
-If we took instead the two closest representable FP numbers we would have got:
+If we took instead the two closest representable FP numbers we would get:
 ```
-
 N_{+1} = 0.10000.1001001001 = 1 * 1.5712890625 * 2 = 3.142578125
 N      = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.14
 N_{-1} = 0.10000.1001000111 = 1 * 1.5693359375 * 2 = 3.138671875
@@ -170,7 +169,7 @@ As model sizes and training throughput demands continued to grow, `bfloat16` has
 FP8 reduces the number of bits used in the floating point representation to 8 and is typically implemented in two complementary formats: `E4M3`, which prioritizes precision, and `E5M2`, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic which represent two critical factors for scaling large-model training.  
 
 However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (`E4M3` vs. `E5M2`), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence. In practice, FP8 shifts part of the complexity from hardware to software, requiring tighter coordination between kernels, scaling logic, and model architecture.
-Moving to FP8 requires a sophisticated orchestration of different numerical formats to balance speed and stability. In early 2025 a lot of buzz around DeepSeek was also due to them releasing their training recipe for FP8 that they used to train their DeepSeek-V3 base model.
+Moving to FP8 requires a sophisticated orchestration of different numerical formats to balance speed and stability. A lot of buzz around DeepSeek was also due to them releasing their training recipe for FP8 that they used to train their DeepSeek-V3 base model.
 In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Not all tensors in the training loop are using the same low-precision, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
 
 ![](figures/deepseek.png)
@@ -192,7 +191,7 @@ To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA
 The core idea of Microscaling is to move from per-tensor to per-block scaling.
 Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks, e.g., 32 elements. Each block gets its own shared scale, an 8-bit exponent value.
 
-To recap how it works an `MXFP*` format uses: 
+To recap how it works a `MXFP*` format uses: 
 1.  **Block grouping:** Elements are grouped into blocks of $k$ elements (usually $k=32$).
 2.  **Shared Per-block Scale:** The hardware calculates the maximum absolute value in that block to determine a shared 8-bit exponent.
 3.  **Local Quantization:** The individual elements are then quantized to 4 bits relative to that local shared scale.
@@ -246,7 +245,7 @@ $$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
 Putting all together, we get a full working scheme that closely resembles the one from DeepSeekV3 shown earlier:
 
 ![](figures/nvfp4_training.png)
-*Figur 6.: Illustration of the NVFP4 training flow for a linear layer. Notice that all GEMMs are performed using NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+**Figure 6.** *Illustration of the NVFP4 training flow for a linear layer. Notice that all GEMMs are performed using NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
 ## Conclusions
