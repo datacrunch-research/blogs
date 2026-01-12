@@ -42,6 +42,13 @@ The real number line allows for infinite precision, but silicon and memory are f
 
 The mathematical representation is defined as:
 
+
+$$
+\begin{equation}
+N = (-1)^{S} \times 1.M \times 2^{E - bias}
+\end{equation}
+$$
+<!-- 
 $$
 \begin{equation}
 \begin{aligned}
@@ -50,10 +57,11 @@ N = (-1)^{S} \times 1.M \times 2^{E - bias}\\
 \end{aligned}
 \end{equation}
 $$
+-->
 
 Let's break down the formula above:
 - The floating point representation uses 1 bit for the sign (`S`) which determines if the number is positive `S = 0` or negative `S = 1`.  
-- The exponent (`E`) is an integer that represents the power of 2 that is adjusted using the bias term and multiplied by the mantissa (`M`). The exponent gives us the dynamic range of the number we can represent, aka which slice of the real number line we are sampling.  
+- The exponent (`E`) is an integer that represents the power of 2 that is adjusted using the $\text{bias}$ term and multiplied by the mantissa (`M`). The exponent gives us the dynamic range of the number we can represent, aka which slice of the real number line we are sampling.  
 - The mantissa (`M`) or significand is a binary number that represents the precision of the number we are representing; if the exponent is giving us the scale, the mantissa on the other hand is telling us which sample we are taking from that slice of the real number line. 
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The first bit is (almost) always 1 to maximize precision. The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on. This allows the mantissa to encode fine-grained precision within the slice of the real number line determined by the exponent.
@@ -201,7 +209,7 @@ While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is v
 To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
 
 The core idea of Microscaling is to move from per-tensor to per-block scaling.
-Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks, e.g., 32 elements. Each block gets its own shared scale an 8-bit exponent value.
+Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks, e.g., 32 elements. Each block gets its own shared scale, an 8-bit exponent value.
 
 To recap how it works an `MXFP*` format uses: 
 1.  **Block grouping:** Elements are grouped into blocks of $k$ elements (usually $k=32$).
@@ -229,7 +237,8 @@ By calculating the shared scale factor over these fewer elements, NVFP4 "confine
 *Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
-Hardware support is only half the story, in fact, training a model in 4-bit precision without it diverging into noise requires a specific algorithmic recipe that has been for instance showcased in the paper from NVIDIA ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149) NVIDIA Blackwell implements this through a specialized pipeline:
+Hardware support is only half the story, in fact, training a model in 4-bit precision without it diverging into noise requires a specific algorithmic recipe, as showcased in the paper from NVIDIA ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149).  
+NVIDIA implements NVFP4 training through a specialized pipeline:
 
 1. **2D Block Scaling**  
    Scaling isn't just applied along one dimension. Factors are calculated both **row-wise** and **column-wise** for the matrix multiplication. This maximizes the effective dynamic range, allowing the tiny 4-bit payload to represent values that would otherwise be out of bounds.
