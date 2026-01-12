@@ -2,11 +2,6 @@
 <!-- Intro -->
 Over the past decade, AI models have increasingly shifted toward lower precision for both training and inference. As Moore’s Law nears its physical limits and transistor density plateaus, chip designers must find new ways to boost FLOPs with each yearly release. Adopting lower-precision data types has become a primary strategy; it not only accelerates computation but also significantly reduces the memory footprint required for model weights, activations, and gradients.
 
-<!-- 
-![](figures/timeline.png)
-Figure 1: [TODO: can you write a caption here and reference it in the text. This figure is very complex] 
--->
-
 <!-- Floating Point Representation -->
 ## Floating Point Representation
 In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows us to represent a wide dynamic range of values.  
@@ -16,13 +11,7 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 - **Accuracy**, which measures the error between the stored number in the chosen representation and the actual real number.
 
 ![](figures/fp_summary.png)
-**Figure 1.** [TODO: review + add caption]
-
-<!-- 
-![](figures/fp00.png)
-Figure 2. 
-[TODO: Can you add a caption here, the figure will be a bit weird in markdown as different sizes so not sure if you can split it up. Maybe just keep the number line the inifinite point is made below.] 
--->
+**Figure 1.** *The figure summarizes the different Floating Point formats discussed in this post. Chronologically we have FP32, FP16, BF16, FP8 (which used a tensor-scale factor), `MXFP*` formats (using a 32 block-level scaling factor) and finally the NVFP4 (which uses a combination of fractional 16-block-level scaling and a FP32 tensor-level scaling).*
 
 As an example, if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
 1. `3.141` a very crude approximation of $\pi$ that uses only 3 fractional digits in base 10.
@@ -48,16 +37,6 @@ $$
 N = (-1)^{S} \times 1.M \times 2^{E - bias}
 \end{equation}
 $$
-<!-- 
-$$
-\begin{equation}
-\begin{aligned}
-N = (-1)^{S} \times 1.M \times 2^{E - bias}\\
-\text{where } \text{bias} = 2^{E_\text{max} - 1} - 1
-\end{aligned}
-\end{equation}
-$$
--->
 
 Let's break down the formula above:
 - The floating point representation uses 1 bit for the sign (`S`) which determines if the number is positive `S = 0` or negative `S = 1`.  
@@ -129,6 +108,7 @@ FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard f
 <p align="center">
   <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
 </p>
+**Figure 3.** *Jeff Dean's X post explaining the bfloat16 format. (Source: [X Thread by Jeff Dean on bfloat16](https://x.com/JeffDean/status/1134523127357161473))* 
 
 Let's see how `3.14` is represented in bfloat16. This format uses `E8M7`: 8 bits for the exponent (same as FP32, with `bias=127`) and 7 bits for the mantissa. The closest representable value to `3.14` in bfloat16 is `3.140625`.
 
@@ -218,8 +198,6 @@ To recap how it works an `MXFP*` format uses:
 
 This approach isolates the impact of outliers. If a massive value exists in the tensor, it only affects the scale of its specific block of 32 neighbors, leaving the rest of the model's weights untouched and precise. This compartmentalization of numerical noise is the key breakthrough that allows training to survive at 4-bit precision.
 
-<!-- ![](figures/fp_summary.png)
-[TODO: Add a caption here] -->
 
 ### NVFP4
 The NVFP4 format introduced with the Blackwell architecture represents the most aggressive step yet in low bit representation.
@@ -234,7 +212,7 @@ While the OCP MX specification typically suggests a block size of 32 elements, N
 By calculating the shared scale factor over these fewer elements, NVFP4 "confines" outliers even more tightly than the standard. This means a single sharp spike in activation values distorts a smaller neighborhood, preserving the fidelity of the surrounding weights.
 
 ![](figures/nvfp4.png)
-*Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+**Figure [todo].** *Illustration of the compute flow for a NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4.  (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
 Hardware support is only half the story, in fact, training a model in 4-bit precision without it diverging into noise requires a specific algorithmic recipe, as showcased in the paper from NVIDIA ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149).  
