@@ -9,23 +9,28 @@ Figure 1: [TODO: can you write a caption here and reference it in the text. This
 
 <!-- Floating Point Representation -->
 ## Floating Point Representation
-In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows to represent a wide dynamic range of values.  
-One of the crucial point we have to keep in mind is that on a machine we have to deal with a fixed budget represented by the number of bits used. To understand the tradeoffs, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
+In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows us to represent a wide dynamic range of values.  
+One of the crucial points we have to keep in mind is that on a machine we have to deal with a fixed budget represented by the number of bits used. To understand the tradeoffs, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
 - **Dynamic range**, controlled by the **exponent** (E) bits determines the scale of the number we are trying to represent, aka how large or how small a number can be (e.g. from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow.
 - **Precision**, controlled by the **mantissa** (M) bits and refers to the density of samples on the real number line $\mathbb{R}$.
 - **Accuracy**, which measures the error between the stored number in the chosen representation and the actual real number.
 
+![](figures/fp_summary.png)
+**Figure 1.** [TODO: review + add caption]
+
+<!-- 
 ![](figures/fp00.png)
 Figure 2. 
-[TODO: Can you add a caption here, the figure will be a bit weird in markdown as different sizes so not sure if you can split it up. Maybe just keep the number line the inifinite point is made below.]
+[TODO: Can you add a caption here, the figure will be a bit weird in markdown as different sizes so not sure if you can split it up. Maybe just keep the number line the inifinite point is made below.] 
+-->
 
-As an example if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
+As an example, if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's for a moment focus on some values we could end up storing in our machine when representing $\pi$ in a FP number:
 1. `3.141` a very crude approximation of $\pi$ that uses only 3 fractional digits in base 10.
 2. `3.141543` is both more precise and more accurate than `3.14`.
 3. `3.142738` which is more precise than `3.141` but less accurate than `3.14`, since the absolute error $|\pi - x|$ ~0.0011.. vs. ~0.0005).
 
 ![](figures/fp_00.png)
-**Figure 1.** *Illustration of precision vs. accuracy using different approximations of $\pi$. The figure demonstrates how a more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
+**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. The figure demonstrates how a more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 
 This simple example shows clearly that the choice of the numerical representation affects a lot the outcome of the computations taking place in our hardware. The example and some of the definitions used in this article are inspired from the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
@@ -52,8 +57,6 @@ Let's break down the formula above:
 - The mantissa (`M`) or significand is a binary number that represents the precision of the number we are representing; if the exponent is giving us the scale, the mantissa on the other hand is telling us which sample we are taking from that slice of the real number line. 
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The first bit is (almost) always 1 to maximize precision. The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on. This allows the mantissa to encode fine-grained precision within the slice of the real number line determined by the exponent.
-
-[Further details on the floating point representation are discussed in the appendix of the blogpost](#appendix-a-floating-point-representation)
 
 
 ### Floating Point 32 
@@ -113,7 +116,7 @@ N      = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.1
 N_{-1} = 0.10000.1001000111 = 1 * 1.5693359375 * 2 = 3.138671875
 ```
 
-#### `bfloat16`
+### `bfloat16`
 FP32, FP16 and FP64 are defined in the IEEE 754 standard and were the standard for FP arithmetic in DL for many years until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa, `E5M10 -> E8M7`. This format is a clever way to get the best of both worlds: faster training with enough range to handle large values that may otherwise lead to numerical instabilities during the training phase of the models.
 <p align="center">
   <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
@@ -171,20 +174,19 @@ N      = 0.10000000.1001001 = 1 * 1.5703125 * 2 = 3.140625 <--- More accurate re
 N_{-1} = 0.10000000.1001000 = 1 * 1.5625 * 2 = 3.125
 ```
 
-Note that bfloat16 achieves the same precision as FP16 for this value (both represent 3.140625), but bfloat16's wider exponent range (8 bits vs 5 bits) provides better dynamic range, making it more suitable for training where large activation values can occur.
+Note that while bfloat16 results in the same representable value as FP16 for this specific example, generally bfloat16 has lower precision (7 mantissa bits vs 10) in exchange for the wider dynamic range required for training stability. This is noticeable if you check the clostest representations to `N` computed here and compare them to those from the previous section, we can see that the gap between the values is larger due to the smaller precision of `bf16` format.
 
-#### FP8
+### FP8
 As model sizes and training throughput demands continued to grow, `bfloat16` has become a limiting factor due to the heavier memory bandwidth and compute density with bigger models. This motivated the transition toward even lower-precision formats such as FP8.  
 FP8 reduces the number of bits used in the floating point repesentation to 8 and is typically implemented in two complementary formats: `E4M3`, which prioritizes precision, and `E5M2`, which prioritizes dynamic range. On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput and better utilization of on-chip compute resources compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic which represent two critical factors for scaling large-model training.  
 
 However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (`E4M3` vs. `E5M2`), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence. In practice, FP8 shifts part of the complexity from hardware to software, requiring tighter coordination between kernels, scaling logic, and model architecture.
 Moving to FP8 requires a sophisticated orchestration of different numerical formats to balance speed and stability. In early 2025 a lot of buzz around DeepSeek was also due to them releasing their training recipe for FP8 that they used to train their DeepSeek-V3 base model.
-In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Not all tensors in the training loop are using the same low-recision, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
+In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Not all tensors in the training loop are using the same low-precision, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
 
 ![](figures/deepseek.png)
-*Figure: DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))* [TODO: crop better the figure]
+*Figure [todo]. DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
 
-[TODO: double check this and link the discussion to the above figuew]
 As illustrated in the figure above from their technical report, DeepSeek adopts different FP8 variants depending on the operation:
 
 * **Weights (FWD/BWD):** Utilizing FP8 `E4M3`, since weights require finer precision the extra mantissa bit helps in more accurate computations.
@@ -193,7 +195,7 @@ As illustrated in the figure above from their technical report, DeepSeek adopts 
 
 Furthermore, to handle outliers that even `E5M2` can't catch, DeepSeek employs a fine-grained quantization scaling blocks of FP8 elements rather than whole tensors. This software-heavy approach to managing numerical instability highlights the immense challenges of scaling low-precision training.
 
-#### Microscaling (MX) Formats
+### Microscaling (MX) Formats
 While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads towards even smaller formats like 6-bit or 4-bit. At these low precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero and lowering model accuracy.
 
 To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
@@ -211,7 +213,7 @@ This approach isolates the impact of outliers. If a massive value exists in the 
 <!-- ![](figures/fp_summary.png)
 [TODO: Add a caption here] -->
 
-#### NVFP4
+### NVFP4
 The NVFP4 format introduced with the Blackwell architecture represents the most aggressive step yet in low bit representation.
 NVFP4 is a 4-bit floating point format (`E2M1`) composed of:
 * Sign: 1 bit
@@ -259,10 +261,9 @@ Putting all together, we get a full working scheme that closely resembles the on
 *Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 
+## Conclusions
+The journey from 32-bit to 4-bit precision highlights a fundamental shift in AI scaling. We are no longer just relying on transistor density (Moore’s Law) to make models faster; we are fundamentally changing the mathematics of how these models represent reality.
+
+NVFP4 proves that with the right algorithmic "safety nets"—like Stochastic Rounding and Hadamard Transforms—we can strip away precision without sacrificing intelligence. As models continue to grow, this tight co-design between hardware constraints and algorithmic innovation will define the next generation of AI infrastructure.
+
 ---- 
-<!-- ### Appendix A: Floating Point Representation
-#### TODO
-- [ ] Add more details on the floating point representation and the bias term.
-bias term
-- [x] the fact the first bit is always 1 and introducing the rest of the things from the GPU MODE lecture.     
--->
