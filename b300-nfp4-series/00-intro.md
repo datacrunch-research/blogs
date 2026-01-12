@@ -192,7 +192,7 @@ $$
 $$
 $$p = (x - \lfloor x \rfloor) / (\lceil x \rceil - \lfloor x \rfloor)$$
 
-Putting all together, we get a full working scheme that closely resemble the one from DeepSeekV3 shown earlier:
+Putting all together, we get a full working scheme that closely resembles the one from DeepSeekV3 shown earlier:
 
 ![](figures/nvfp4_training.png)
 *Figure: [TODO: add here some comments] (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
