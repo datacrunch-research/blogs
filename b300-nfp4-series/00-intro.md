@@ -120,8 +120,9 @@ Moving to FP8 requires a sophisticated orchestration of different numerical form
 In their paper discussing the architecture (see [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)), they detail their customized mixed-precision strategy. Since not all tensors in the training loop are created equal, while the weights tend to be more stable requiring precision, on the other hand, the activations can have sharp outliers requiring higher dynamic range.
 
 ![](figures/deepseek.png)
-*Figure: DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
+*Figure: DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))* [TODO: crop better the figure]
 
+[TODO: double check this and link the discussion to the above figuew]
 As illustrated in the figure above from their technical report, DeepSeek adopts different FP8 variants depending on the operation:
 
 * **Weights (FWD/BWD):** Utilizing FP8 E4M3, since weights require finer precision the extra mantissa bit helps in more accurate computations.
@@ -133,22 +134,22 @@ Furthermore, to handle outliers that even E5M2 can't catch, DeepSeek employs a f
 It also sets the stage for the next frontier: what if the hardware itself could handle this granularity efficiently, pushing precision even lower?
 
 #### Microscaling (MX) Formats
-While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads towards even smaller formats like 6-bit or 4-bit. However, at these low precisions, standard "per-tensor" scaling (used in INT8) breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively crushing all smaller values to zero and destroying model accuracy.
+While DeepSeek-V3 (and likely many other frontier models) shows us that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads towards even smaller formats like 6-bit or 4-bit. At these low precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero and lowering model accuracy.
 
-To solve this, a consortium of tech giants (including AMD, Arm, Intel, NVIDIA, and Qualcomm) aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
+To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
 
 The core idea of Microscaling is to move from per-tensor to per-block scaling.
-Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements). Each block gets its own shared scale (exponent), while the individual elements within the block share the low-precision mantissa.
+Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks, e.g., 32 elements. Each block gets its own shared scale an 8-bit exponent value.
 
-How it works? (E.g., MXFP4):
-1.  **Block grouping:** Elements are grouped into blocks of $k$ (e.g., $k=32$).
-2.  **Shared Scale:** The hardware calculates the maximum absolute value in that block to determine a shared 8-bit exponent.
+To recap how it works an `MXFP*` format uses: 
+1.  **Block grouping:** Elements are grouped into blocks of $k$ elements (usually $k=32$).
+2.  **Shared Per-block Scale:** The hardware calculates the maximum absolute value in that block to determine a shared 8-bit exponent.
 3.  **Local Quantization:** The individual elements are then quantized to 4 bits relative to that local shared scale.
 
-This approach isolates the impact of outliers. If a massive value exists in the tensor, it only affects the scale of its specific block of 32 neighbors, leaving the rest of the model's weights untouched and precise. This "compartmentalization" of numerical noise is the key breakthrough that allows training to survive at 4-bit precision.
+This approach isolates the impact of outliers. If a massive value exists in the tensor, it only affects the scale of its specific block of 32 neighbors, leaving the rest of the model's weights untouched and precise. This compartmentalization of numerical noise is the key breakthrough that allows training to survive at 4-bit precision.
 
-![](figures/fp_summary.png)
-[TODO: Add a caption here]
+<!-- ![](figures/fp_summary.png)
+[TODO: Add a caption here] -->
 
 #### NVFP4
 The NVFP4 format introduced with the Blackwell architecture represents the most aggressive step yet in low bit representation.
