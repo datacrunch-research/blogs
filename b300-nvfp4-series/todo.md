@@ -29,3 +29,13 @@
 - [x] **Audience consistency**: Review for consistent technical depth — either add brief explanations for ML terms (gradient descent, activations) or assume expert audience throughout
 - [x] **Figures 5 & 6**: Differentiate captions more clearly — one shows compute flow, one shows training flow
 - [x] **Conclusion (lines 258-261)**: Strengthen with concrete performance numbers, future directions beyond NVFP4, or guidance on when to use which format
+
+---
+
+### Paper Cross-Check Corrections (arXiv-2509.25149v1)
+
+- [ ] **2D Block Scaling**: Add that activations/gradients use 1×16 blocks (not 16×16 like weights)
+- [ ] **RHT specificity**: Clarify RHT is applied only to Wgrad (weight gradient GEMMs), not Fprop/Dgrad. Uses 16×16 matrices.
+- [ ] **Stochastic Rounding**: Specify SR applies only to gradients; weights/activations use round-to-nearest-even
+- [ ] **Scale format**: Change "FP8 scale" to "E4M3 scale" for precision
+- [ ] **Mixed precision strategy**: Add that ~15% of layers kept in BF16 (first 2 + last 8 blocks)
