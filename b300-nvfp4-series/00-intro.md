@@ -113,7 +113,7 @@ The gap between adjacent representable values is approximately 0.002—this is t
 
 ### bfloat16
 
-FP32, FP16, and FP64 are defined in the IEEE 754 standard and were standard for floating point arithmetic in deep learning for many years—until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by using the same number of exponent bits but shortened the mantissa: `E5M10 -> E8M7`. This is a clever way to get the best of both worlds: faster training with enough range to handle large values that might otherwise cause numerical instabilities.
+FP32, FP16, and FP64 are defined in the IEEE 754 standard and were standard for floating point arithmetic in deep learning for many years, until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by matching its 8 exponent bits, while using only 7 mantissa bits (compared to FP16's 10). The result is `E8M7`, a format that trades precision for range. This is a clever way to get the best of both worlds: faster training with enough range to handle large values that might otherwise cause numerical instabilities.
 
 <p align="center">
   <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
@@ -139,7 +139,7 @@ Note that while bfloat16 results in the same representable value as FP16 for thi
 
 ### FP8
 
-As model sizes and training throughput demands continued to grow, bfloat16 became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8.
+As model sizes and training throughput demands continued to grow, bfloat16 became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8. FP8 training, formalized by [Micikevicius et al.](https://arxiv.org/abs/2209.05433), became feasible at scale with the introduction of FP8 tensor cores in NVIDIA's Hopper (H100) architecture.
 
 FP8 reduces the representation to 8 bits, typically implemented in two complementary formats: `E4M3` (prioritizing precision) and `E5M2` (prioritizing dynamic range). On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic—two critical factors for scaling large-model training.
 
@@ -154,8 +154,8 @@ Moving to FP8 requires sophisticated orchestration of different numerical format
 
 DeepSeek adopts different FP8 variants depending on the operation:
 
-- **Weights (FWD/BWD):** FP8 `E4M3`, since weights require finer precision—the extra mantissa bit enables more accurate computations.
-- **Activations (FWD):** FP8 `E5M2`, since activations often contain outliers that push the boundaries of dynamic range—the extra exponent bit prevents destabilizing overflows.
+- **Weights (forward/backward pass):** FP8 `E4M3`, since weights require finer precision; the extra mantissa bit enables more accurate computations.
+- **Activations (forward pass):** FP8 `E5M2`, since activations often contain outliers that push the boundaries of dynamic range; the extra exponent bit prevents destabilizing overflows.
 - **Master Weights and Optimizer States:** Kept in higher precision (FP32 and FP16) to ensure accurate gradient accumulation and stable convergence.
 
 Furthermore, to handle outliers that even `E5M2` can't accommodate, DeepSeek employs fine-grained quantization, scaling blocks of FP8 elements rather than whole tensors. This software-heavy approach to managing numerical instability highlights the challenges of scaling low-precision training.
@@ -174,13 +174,13 @@ The core idea is moving from per-tensor to per-block scaling. Instead of assigni
 2. **Shared per-block scale:** The hardware finds the maximum absolute value in each block to determine a shared 8-bit exponent.
 3. **Local quantization:** Individual elements are quantized to 4 bits relative to their block's scale.
 
-**A simple example:** Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors—the rest of the tensor remains well-quantized.
+**A simple example (real blocks use 32 elements):** Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized.
 
 This compartmentalization of numerical noise is the key breakthrough enabling training at 4-bit precision.
 
 ### NVFP4
 
-The NVFP4 format, introduced with NVIDIA's Blackwell architecture, represents the most aggressive step yet in low-bit representation.
+Building on the MX foundation, NVIDIA developed NVFP4 for their Blackwell architecture, adding hardware-specific refinements to push the limits of low-bit training.
 
 NVFP4 is a 4-bit floating point format (`E2M1`):
 - Sign: 1 bit
@@ -192,13 +192,13 @@ With only **16 unique values** available in a 4-bit representation, careful scal
 While the OCP MX specification suggests 32-element blocks, NVIDIA chose finer granularity: **16-element blocks**. By calculating the shared scale factor over fewer elements, NVFP4 confines outliers more tightly—a single spike distorts a smaller neighborhood, preserving fidelity in surrounding weights.
 
 ![](figures/nvfp4.png)
-**Figure 5.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+**Figure 5.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown). (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149).
 
 **1. 2D Block Scaling**
 
-Scaling is applied along both **row-wise** and **column-wise** dimensions for matrix multiplication. This maximizes effective dynamic range, allowing the tiny 4-bit payload to represent values that would otherwise overflow or underflow.
+Scaling is applied along both **row-wise** and **column-wise** dimensions for weight matrices (16×16 blocks). Why both? During forward pass, scaling happens along rows; during backward pass, tensors are transposed, so scaling happens along columns. Without 2D scaling, the same weight would have two different quantized representations, breaking the chain rule and degrading training quality.
 
 **2. Random Hadamard Transform (RHT)**
 
@@ -228,10 +228,10 @@ $$
 
 where $p = \frac{x - \lfloor x \rfloor}{\lceil x \rceil - \lfloor x \rfloor}$
 
-This ensures that **on average**, the expected value of the rounded number equals the original—allowing gradient descent to converge correctly over time despite the severe quantization.
+This ensures that **on average**, the expected value of the rounded number equals the original. Over many operations, rounding errors cancel out rather than accumulate in one direction, allowing gradient descent to converge correctly despite the severe quantization.
 
 ![](figures/nvfp4_training.png)
-**Figure 6.** *Illustration of the NVFP4 training flow for a linear layer. All GEMMs are performed using NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
+**Figure 6.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
 ---
 
@@ -259,4 +259,12 @@ This ensures that **on average**, the expected value of the rounded number equal
 
 The journey from 32-bit to 4-bit precision highlights a fundamental shift in AI scaling. We are no longer just relying on transistor density (Moore's Law) to make models faster; we are fundamentally changing how these models represent numbers.
 
-NVFP4 proves that with the right algorithmic safety nets—stochastic rounding, Hadamard transforms, fine-grained block scaling—we can strip away precision without sacrificing model quality. As models continue to grow, this tight co-design between hardware constraints and algorithmic innovation will define the next generation of AI infrastructure.
+NVFP4 proves that with the right algorithmic safety nets (stochastic rounding, Hadamard transforms, fine-grained block scaling) we can strip away precision without sacrificing model quality. Early benchmarks on NVIDIA Blackwell demonstrate the payoff: **3x faster training** compared to Hopper on equivalent GPU counts, **4 to 6x speed gains** over BF16 operations, and **approximately 1.8x memory reduction** versus FP8, all while maintaining validation loss within 1 to 1.5% of FP8 baselines.
+
+**When to use which format:**
+* **FP32/FP16**: Master weights, optimizer states, and accumulation; use anywhere numerical stability is paramount.
+* **BF16**: Default choice for training weights and gradients when you need FP32's dynamic range but can tolerate lower precision.
+* **FP8**: Production training on Hopper/Ada hardware; use `E4M3` for weights and `E5M2` for activations.
+* **NVFP4**: Blackwell native training when maximum throughput matters; requires algorithmic support (RHT, SR, 2D scaling).
+
+As models continue to grow, this tight co-design between hardware constraints and algorithmic innovation will define the next generation of AI infrastructure. The trend is clear: future formats will push precision even lower, demanding ever more sophisticated software techniques to maintain convergence.
