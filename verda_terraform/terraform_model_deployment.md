@@ -88,9 +88,10 @@ go build -o terraform-provider-verda
 ```bash
 # Terraform custom provider 
 # NOTE: change verda-cloud/verda value with the correct path
+
 echo 'provider_installation {
  dev_overrides {
-   "verda-cloud/verda" = "<PATH_WHERE_GIT_CLONE_HAPPENED>/terraform-provider-verda"
+   "verda-cloud/verda" = "<Path_to_git_clone_verda_repo>/terraform-provider-verda"
  }
  direct {}
 }' > $HOME/.terraformrc
@@ -109,6 +110,8 @@ This configuration describes several resources:
 
 
 ```hcl
+# NOTE: Path to public key required on public_key
+
 terraform {
   required_providers {
     verda = {
