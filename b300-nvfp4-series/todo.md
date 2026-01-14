@@ -2,7 +2,7 @@
 
 #### Figures
 * [x] Redo Figure 1 (fp_summary.png)
-* [ ] Crop almost all figures again
+* [x] Crop almost all figures again
 * [ ] NVFP4 section: describe content of figures properly
 
 #### FP32/FP16 Section
