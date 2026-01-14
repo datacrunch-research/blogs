@@ -164,23 +164,19 @@ Furthermore, to handle outliers that even `E5M2` can't accommodate, DeepSeek emp
 
 While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit. At these precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
 
-To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce Microscaling (MX) formats.
+To solve this, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the [specification of the Microscaling (MX) formats.](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf)
 
-The core idea is moving from per-tensor to per-block scaling. Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements), each with its own shared 8-bit scale exponent.
-
-**How it works:**
-
+The core idea is moving from per-tensor to per-block scaling. Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements), each with its own shared 8-bit scale exponent.  
+How it works:
 1. **Block grouping:** Elements are grouped into blocks of $k$ elements (typically $k=32$).
 2. **Shared per-block scale:** The hardware finds the maximum absolute value in each block to determine a shared 8-bit exponent.
 3. **Local quantization:** Individual elements are quantized to 4 bits relative to their block's scale.
 
-**A simple example (real blocks use 32 elements):** Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized.
-
+A simple example (real blocks use 32 elements): Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized. 
 This compartmentalization of numerical noise is the key breakthrough enabling training at 4-bit precision.
 
 ### NVFP4
-
-Building on the MX foundation, NVIDIA developed NVFP4 for their Blackwell architecture, adding hardware-specific refinements to push the limits of low-bit training.
+Building on the MX foundation, NVIDIA developed NVFP4 for their Blackwell architecture, adding hardware-specific refinements to push the limits of low-bit training.  
 
 NVFP4 is a 4-bit floating point format (`E2M1`):
 - Sign: 1 bit
@@ -196,22 +192,18 @@ While the OCP MX specification suggests 32-element blocks, NVIDIA chose finer gr
 
 Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149).
 
-**1. 2D Block Scaling**
-
+**1. 2D Block Scaling**  
 Scaling is applied along both **row-wise** and **column-wise** dimensions for weight matrices (16×16 blocks). Why both? During forward pass, scaling happens along rows; during backward pass, tensors are transposed, so scaling happens along columns. Without 2D scaling, the same weight would have two different quantized representations, breaking the chain rule and degrading training quality.
 
-**2. Random Hadamard Transform (RHT)**
-
-One of the biggest enemies of quantization is "outlier features"—specific neurons that consistently fire with massive values. These outliers can wreck the quantization scale for their entire block.
-
+**2. Random Hadamard Transform (RHT)**  
+One of the biggest enemies of quantization is "outlier features"—specific neurons that consistently fire with massive values. These outliers can wreck the quantization scale for their entire block.  
 The Random Hadamard Transform "smears" outlier information across the entire vector *before* quantization:
 - **Before RHT:** One massive value, many small ones → hard to quantize
-- **After RHT:** Many medium values → efficient quantization
+- **After RHT:** Many medium values → efficient quantization 
 
 This mathematical operation redistributes energy so that no single element dominates the scale calculation.
 
-**3. Stochastic Rounding (SR)**
-
+**3. Stochastic Rounding (SR)**  
 With very few bits, standard "round-to-nearest" creates systematic bias. Always rounding 0.4 down to 0 accumulates massive error over billions of operations.
 
 NVFP4 uses **stochastic rounding**, which rounds probabilistically based on the distance to the nearest representable values:
@@ -233,7 +225,7 @@ This ensures that **on average**, the expected value of the rounded number equal
 ![](figures/nvfp4_training.png)
 **Figure 6.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
----
+<!-- ---
 
 ## Summary: Floating Point Formats for AI
 
@@ -253,7 +245,7 @@ This ensures that **on average**, the expected value of the rounded number equal
 - **Lower precision shifts complexity to software:** NVFP4 only works due to algorithmic interventions (Hadamard transforms, stochastic rounding, 2D scaling).
 - **Format selection is operation-dependent:** Modern training uses different formats for weights vs. activations vs. gradients vs. optimizer states.
 
----
+--- -->
 
 ## Conclusions
 
