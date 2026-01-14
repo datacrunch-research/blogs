@@ -12,7 +12,7 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 - **Precision**, controlled by the **mantissa** (M) bits, refers to the density of samples on the real number line $\mathbb{R}$.
 - **Accuracy** measures the error between the stored number in the chosen representation and the actual real number.
 
-![](figures/fp_summary.png)
+![](figures/fp_00.png)
 **Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, FP16, BF16, FP8 (which uses a tensor-scale factor), `MXFP*` formats (using a 32-element block-level scaling factor), and finally NVFP4 (which uses a combination of 16-element block-level scaling and FP32 tensor-level scaling).*
 
 As an example, if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's focus on some values we could end up storing when representing $\pi$ as a floating point number that are allowed to use different number of fractional digits:
@@ -21,7 +21,7 @@ As an example, if we want to represent $\pi$ we can have several distinct repres
 2. `3.141543`: both more precise and more accurate than `3.141`.
 3. `3.142738`: more precise than `3.141` but *less accurate*, since the absolute error $|\pi - x|$ is ~0.0011 vs. ~0.0005.
 
-![](figures/fp_00.png)
+![](figures/fp_01.png)
 **Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. The example and some of the definitions used in this article are inspired by the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).

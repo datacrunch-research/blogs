@@ -1,7 +1,7 @@
 ### TODO List
 
 #### Figures
-* [ ] Redo Figure 1 (fp_summary.png)
+* [x] Redo Figure 1 (fp_summary.png)
 * [ ] Crop almost all figures again
 * [ ] NVFP4 section: describe content of figures properly
 
