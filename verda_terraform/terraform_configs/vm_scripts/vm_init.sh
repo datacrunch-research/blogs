@@ -17,7 +17,8 @@ mkdir -p $HOST_MODEL_PATH
 
 # Docker setup (store artifacts in local NVMe)
 sudo mkdir -p /mnt/local_nvme/docker
-sudo echo '{
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
     "data-root": "/mnt/local_nvme/docker",
     "runtimes": {
         "nvidia": {
@@ -26,16 +27,13 @@ sudo echo '{
         }
     }
 }
-' > /etc/docker/daemon.json
+EOF
+
 
 # Restart docker to apply the changes
 sudo systemctl restart docker
 
-# sglang setup
-export NCCL_DEBUG="DEBUG"
-export FLASHINFER_WORKSPACE_BASE="/nfs_home"
-export SGLANG_TORCH_PROFILER_DIR="/nfs_home/profile_result" # Or another directory for storing profiler results
-       
+# sglang setup       
 # check image version in https://hub.docker.com/r/lmsysorg/sglang/tags
 docker run --gpus all --shm-size 32g --network=host --name sglang_server -d --ipc=host \
   -v "$HOST_MODEL_PATH:$C_MODEL_PATH" \
@@ -56,3 +54,4 @@ docker run --gpus all --shm-size 32g --network=host --name sglang_server -d --ip
 
 
 # Check logs: docker logs -f sglang_server
+# Execute benchmark with: docker exec -it sglang_server bash -lc "python3 -m sglang.bench_one_batch_server --model None --base-url http://localhost:30000 --batch-size 16 --input-len 1024 --output-len 1024"

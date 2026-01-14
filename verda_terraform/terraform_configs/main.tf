@@ -13,7 +13,7 @@ provider "verda" {}
 
 resource "verda_ssh_key" "tf_ssh" {
   name       = "tf-ssh"
-  public_key = file("/mnt/cephfs/dc/rodri/blogs/verda_terraform/rodrimacos_25519.pub")
+  public_key = file("<path_to_key.pub>")
 }
 
 resource "verda_startup_script" "init_vm" {
@@ -34,6 +34,11 @@ resource "verda_instance" "terraform-sglang" {
   hostname      = "terraform-sglang"
   description   = "Example instance"
   location      = "FIN-03"
+  os_volume = {
+    name = "terraform-os"
+    size = 200
+    type = "NVMe"
+  }
 
   ssh_key_ids = [verda_ssh_key.tf_ssh.id]
   startup_script_id = verda_startup_script.init_vm.id
