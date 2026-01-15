@@ -3,10 +3,13 @@
 #### Figures
 * [x] Redo Figure 1 (fp_summary.png)
 * [x] Crop almost all figures again
-* [ ] NVFP4 section: describe content of figures properly
+
+* [ ] NVFP4 section: 
+  * [ ] Read again the NVIDIA paper
+  * [ ] describe content of figures properly
 
 #### FP32/FP16 Section
-* [ ] Mention that FP32 and FP16 are defined by IEEE 754 standard
+* [x] Mention that FP32 and FP16 are defined by IEEE 754 standard
 * [ ] Double-check FP16/BF16 examples
 * [ ] Add visualization for precision trade-offs (dynamic range vs precision)
 * [ ] Use binades narrative (inspired by Paulius presentation) — lightweight version with visualization

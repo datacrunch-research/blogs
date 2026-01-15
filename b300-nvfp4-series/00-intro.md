@@ -2,6 +2,8 @@
 
 Over the past decade, AI models have increasingly shifted toward lower precision for both training and inference. As Moore's Law nears its physical limits and transistor density plateaus, chip designers must find new ways to boost FLOPs with each yearly release. Adopting lower-precision data types has become a primary strategy; it not only accelerates computation but also significantly reduces the memory footprint required for model weights, activations, and gradients.
 
+The content in this article is inspired by the [GPU MODE lecture on "Numerics and AI"](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) and the [GTC keynote on "Blackwell Numerics for AI"](https://www.nvidia.com/en-us/on-demand/session/gtc25-s72458/) both by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
+
 ## Floating Point Representation
 
 In simple terms, floating point numbers are a way of representing real numbers on a computer using a fixed number of bits. This representation allows us to represent a wide dynamic range of values.
@@ -13,18 +15,43 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 - **Accuracy** measures the error between the stored number in the chosen representation and the actual real number.
 
 ![](figures/fp_00.png)
-**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, FP16, BF16, FP8 (which uses a tensor-scale factor), `MXFP*` formats (using a 32-element block-level scaling factor), and finally NVFP4 (which uses a combination of 16-element block-level scaling and FP32 tensor-level scaling).*
+**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, BF16, FP8 which usually uses just with a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
 
-As an example, if we want to represent $\pi$ we can have several distinct representations using a finite number of bits. Let's focus on some values we could end up storing when representing $\pi$ as a floating point number that are allowed to use different number of fractional digits:
+> **Measuring Dynamic Range with Binades**
+> 
+> A **binade** is one power of 2 of dynamic range—essentially measuring how many "doublings" fit between the smallest and largest representable values:
+> 
+> $$\text{binades} = \log_2\left(\frac{\text{max representable}}{\text{min representable}}\right)$$
+> 
+> | Format | Exponent Bits | Binades |  |
+> |--------|---------------|---------|-------------|
+> | FP32 | 8 | ~277 | Good for most computations |
+> | FP16 | 5 | ~40 | Good for most activations |
+> | BF16 | 8 | ~261 | Same P32 range, but limited precision |
+> | FP8 E4M3 | 4 | ~18 | Suitable for forward pass |
+> | FP8 E5M2 | 5 | ~32 | Needed for backward pass |
+> | FP4 E2M1 | 2 | ~3.6 | Needs additional tricks to work |
+> 
+> FP4's 3.6 binades cannot represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
-1. `3.141`: a crude approximation of $\pi$ that uses only 3 fractional digits in base 10.
-2. `3.141543`: both more precise and more accurate than `3.141`.
-3. `3.142738`: more precise than `3.141` but *less accurate*, since the absolute error $|\pi - x|$ is ~0.0011 vs. ~0.0005.
+As an example, if we want to represent $\pi$ with a fixed number of decimal digits we will end up with different approximations. We know that $\pi = 3.141592653\dots$, if we were limited with a budget of three digits we can have two choices:
+
+1. $\hat{\pi}_1 = 3.141$, which has an absolute error of $|\pi - \hat{\pi}_1| \approx 0.00059$,
+2. $\hat{\pi}_2 = 3.142$, which has an absolute error of $|\pi - \hat{\pi}_2| \approx 0.00041$.
+
+Both approximations are using the same budget in terms of digits but they are achieving a different accuracy in representing the value we want to use in our computations.  
+If we would like to use more digits, we could end up with more accurate representations but sometimes also less accurate even if more precise representations. Let's clarify with an example. If we use six digits we could for instance end up storing:
+
+3. $\hat{\pi}_3 = 3.141543$, which has an absolute error of $|\pi - \hat{\pi}_3| \approx 0,00005$,
+4. $\hat{\pi}_4 = 3.142738$, which has an absolute error of $|\pi - \hat{\pi}_4| \approx 0.00115$.
+
+As we can see in Figure 2, the value we $\hat{\pi}_i$ try to capture a good approximation of the real value of $\pi$ and varying the budget for our representation we will end up with different solutions and tradeoffs.
+This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. 
 
 ![](figures/fp_01.png)
 **Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
-This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. The example and some of the definitions used in this article are inspired by the [GPU Mode lecture on numerics](https://youtu.be/ua2NhlenIKo?si=AG-ekf7DCkAkIJAa) by [Paulius Mickevicius](https://developer.nvidia.com/blog/author/pauliusm/).
+
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation, we can sample the real line using three bit fields:
 
@@ -50,7 +77,7 @@ In normalized floating point representation, the significand always starts with 
 
 ### Floating Point 32 and Floating Point 16
 
-FP32 and FP64 are the most common representations used in engineering and scientific applications. Aside from some corner cases requiring higher precision, historically, Deep Learning relied on FP32.
+FP32 and FP64 are the most common representations used in engineering and scientific applications. They are defined in the [IEEE 754 standard](https://en.wikipedia.org/wiki/IEEE_754) and they have been widely used for deep learning application with tons of support on all major libraries.
 
 FP32 is a 32-bit representation, also known as single precision. In FP32, 8 bits are used for the exponent while 23 bits are used for the mantissa (`E8M23`).
 
@@ -225,6 +252,7 @@ This ensures that **on average**, the expected value of the rounded number equal
 ![](figures/nvfp4_training.png)
 **Figure 6.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
+As we can observe in Figure 6, cmbining the techniques 
 <!-- ---
 
 ## Summary: Floating Point Formats for AI
