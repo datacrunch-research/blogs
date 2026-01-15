@@ -10,18 +10,18 @@
 
 #### FP32/FP16 Section
 * [x] Mention that FP32 and FP16 are defined by IEEE 754 standard
-* [ ] Double-check FP16/BF16 examples
+* [x] Double-check FP16/BF16 examples
 * [ ] Add visualization for precision trade-offs (dynamic range vs precision)
-* [ ] Use binades narrative (inspired by Paulius presentation) — lightweight version with visualization
+* [x] Use binades narrative (inspired by Paulius presentation) — lightweight version with visualization
 
 #### FP8 Section
-* [ ] Add missing crucial reference: [Micikevicius et al. 2022](https://arxiv.org/abs/2209.05433) — FP8 Formats for Deep Learning
-* [ ] Expand DeepSeek approach details
-* [ ] Highlight how DeepSeek led the way to fine-grained scaling (per-block)
-* [ ] Connect to how this influenced hardware design (MX formats)
+* [x] Add missing crucial reference: [Micikevicius et al. 2022](https://arxiv.org/abs/2209.05433) — FP8 Formats for Deep Learning
+* [x] Expand DeepSeek approach details
+* [x] Highlight how DeepSeek led the way to fine-grained scaling (per-block)
+* [x] Connect to how this influenced hardware design (MX formats)
 
 #### MX Formats Section
-* [ ] Add references (OCP spec, relevant papers)
+* [x] Add references (OCP spec, relevant papers)
 
 #### Other
 * [ ] Look for more details on the Random Hadamard Transform (so far I didn't put much emphasis on that)

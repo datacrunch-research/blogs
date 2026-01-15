@@ -27,7 +27,7 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 > |--------|---------------|---------|-------------|
 > | FP32 | 8 | ~277 | Good for most computations |
 > | FP16 | 5 | ~40 | Good for most activations |
-> | BF16 | 8 | ~261 | Same P32 range, but limited precision |
+> | BF16 | 8 | ~261 | Same FP32 range, but limited precision |
 > | FP8 E4M3 | 4 | ~18 | Suitable for forward pass |
 > | FP8 E5M2 | 5 | ~32 | Needed for backward pass |
 > | FP4 E2M1 | 2 | ~3.6 | Needs additional tricks to work |
@@ -166,7 +166,7 @@ Note that while bfloat16 results in the same representable value as FP16 for thi
 
 ### FP8
 
-As model sizes and training throughput demands continued to grow, bfloat16 became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8. FP8 training, formalized by [Micikevicius et al.](https://arxiv.org/abs/2209.05433), became feasible at scale with the introduction of FP8 tensor cores in NVIDIA's Hopper (H100) architecture.
+As model sizes and training throughput demands continued to grow, bfloat16 became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8. FP8 training, formalized by [FP8 Formats for Deep Learning (Micikevicius et al. 2022)](https://arxiv.org/abs/2209.05433), became feasible at scale with the introduction of FP8 tensor cores in NVIDIA's Hopper (H100) architecture.
 
 FP8 reduces the representation to 8 bits, typically implemented in two complementary formats: `E4M3` (prioritizing precision) and `E5M2` (prioritizing dynamic range). On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic—two critical factors for scaling large-model training.
 
@@ -179,13 +179,17 @@ Moving to FP8 requires sophisticated orchestration of different numerical format
 ![](figures/deepseek.png)
 **Figure 4.** *DeepSeek-V3 Mixed Precision Training Strategy (Source: [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437))*
 
-DeepSeek adopts different FP8 variants depending on the operation:
+Unlike prior FP8 approaches that use `E4M3` for forward pass and `E5M2` for backward pass, DeepSeek uses **E4M3 for all tensors**. This is made possible by their fine grained quantization strategy, which effectively shares exponent bits among grouped elements, mitigating the limited dynamic range of E4M3.
 
-- **Weights (forward/backward pass):** FP8 `E4M3`, since weights require finer precision; the extra mantissa bit enables more accurate computations.
-- **Activations (forward pass):** FP8 `E5M2`, since activations often contain outliers that push the boundaries of dynamic range; the extra exponent bit prevents destabilizing overflows.
-- **Master Weights and Optimizer States:** Kept in higher precision (FP32 and FP16) to ensure accurate gradient accumulation and stable convergence.
+Their quantization operates at two granularities:
+- **Activations:** `1×128` tile wise scaling (per token, per 128 channels)
+- **Weights:** `128×128` block wise scaling (per 128 input channels, per 128 output channels)
 
-Furthermore, to handle outliers that even `E5M2` can't accommodate, DeepSeek employs fine-grained quantization, scaling blocks of FP8 elements rather than whole tensors. This software-heavy approach to managing numerical instability highlights the challenges of scaling low-precision training.
+This per block approach isolates outliers to their local neighborhood rather than letting them skew the entire tensor's scale. DeepSeek also addresses accumulation precision: H800 Tensor Cores retain only ~14 bits during FP8 GEMM, insufficient for large matrix dimensions. Their solution promotes partial results to CUDA Cores every 128 elements for full FP32 accumulation.
+
+Master weights and gradients remain in FP32 for numerical stability, while optimizer states (AdamW first/second moments) use BF16 to reduce memory overhead.
+
+Notably, DeepSeek's paper explicitly acknowledges that their fine grained quantization "is highly consistent with the idea of microscaling formats," and that NVIDIA's Blackwell GPUs would provide native hardware support for such approaches.
 
 ### Microscaling (MX) Formats
 
@@ -252,7 +256,7 @@ This ensures that **on average**, the expected value of the rounded number equal
 ![](figures/nvfp4_training.png)
 **Figure 6.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. (Source: [Pretraining Large Language Models with NVFP4](https://arxiv.org/abs/2509.25149))*
 
-As we can observe in Figure 6, cmbining the techniques 
+As we can observe in Figure 6, combining the techniques 
 <!-- ---
 
 ## Summary: Floating Point Formats for AI
