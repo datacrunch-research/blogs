@@ -73,7 +73,7 @@ go version
 3. Download the terraform-verda-provider from our [Github repository](https://github.com/verda-cloud/terraform-provider-verda/tree/main):
 
 ```bash
-git clone https://github.com/verda-cloud/terraform-provider-verda/tree/main
+git clone https://github.com/verda-cloud/terraform-provider-verda.git
 ```
 
 4. Build the verda provider using Go:
