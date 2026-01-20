@@ -61,8 +61,9 @@ sudo apt update && sudo apt install terraform
 
 ```bash
 # Go installation: https://go.dev/dl/
+wget https://go.dev/dl/go1.25.6.linux-386.tar.gz
 sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf go1.25.5.linux-arm64.tar.gz
+sudo tar -C /usr/local -xzf go1.25.6.linux-386.tar.gz
 export PATH=$PATH:/usr/local/go/bin
 
 # verification
