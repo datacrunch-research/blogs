@@ -19,12 +19,12 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 
 > **Measuring Dynamic Range with Binades**
 > 
-> A **binade** is one power of 2 of dynamic range—essentially measuring how many "doublings" fit between the smallest and largest representable values:
+> A binade is one power of 2 of dynamic range, essentially how many binary numbers sharing the same sign and exponent bits fit between the smallest and largest representable values:
 > 
 > $$\text{binades} = \log_2\left(\frac{\text{max representable}}{\text{min representable}}\right)$$
 > 
-> | Format | Exponent Bits | Binades |  |
-> |--------|---------------|---------|-------------|
+> | Format | Exponent Bits | Binades |
+> |--------|---------------|---------|
 > | FP32 | 8 | ~277 | Good for most computations |
 > | FP16 | 5 | ~40 | Good for most activations |
 > | BF16 | 8 | ~261 | Same FP32 range, but limited precision |
@@ -32,7 +32,7 @@ One of the crucial points we have to keep in mind is that on a machine we have t
 > | FP8 E5M2 | 5 | ~32 | Needed for backward pass |
 > | FP4 E2M1 | 2 | ~3.6 | Needs additional tricks to work |
 > 
-> FP4's 3.6 binades cannot represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
+> Going to 4 bits allows to get only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
 As an example, if we want to represent $\pi$ with a fixed number of decimal digits we will end up with different approximations. We know that $\pi = 3.141592653\dots$, if we were limited with a budget of three digits we can have two choices:
 
@@ -49,11 +49,10 @@ As we can see in Figure 2, the value we $\hat{\pi}_i$ try to capture a good appr
 This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. 
 
 ![](figures/fp_01.png)
-**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
+**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation, e.g., more decimal digits here, does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 
-
-The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation, we can sample the real line using three bit fields:
+The real number line allows for infinite precision, but silicon and memory are finite. Using a FP representation, we can sample the real line using three bit fields:
 
 1. **Sign (S):** Positive or negative.
 2. **Exponent (E):** The dynamic range (which power of 2 is used).
@@ -72,28 +71,50 @@ Let's break down the formula:
 - The sign bit (`S`) determines if the number is positive (`S = 0`) or negative (`S = 1`).
 - The exponent (`E`) is an integer representing the power of 2, adjusted by the $\text{bias}$ term. The exponent gives us the dynamic range, meaning which slice of the real number line we are sampling.
 - The mantissa (`M`) or significand is a binary number representing the precision; if the exponent gives us the scale, the mantissa tells us which sample we are taking from that slice of the real number line.
+- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, allowing to simplify hardware complexity, improve performance, and reserve in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on.
 
+When the exponent field is all zeros (`E = 0`), the number becomes subnormal (also called denormalized). Instead of an implicit leading `1`, subnormals use an implicit leading `0`, forming significands like `0.1001001000`.  The subnormal floats are a linearly spaced set of values, which span the gap between the negative and positive normal floats.
+This provides a gradual underflow to zero rather than an abrupt jump and prevents underflows.
+
+For FP32, the smallest normalized number is approximately $2^{-126}$ (with significand `1.0`). Subnormals fill the gap between zero and this value, with the smallest subnormal being approximately $2^{-149}$ (significand `0.00...01` with 23 mantissa bits).
+
+```
+Number Line Around Zero (FP32 example):
+
+Exponent:    E=0 (subnormal)         E=1 (normalized)    E=2      E=3
+             ├──────────────────────┼───────────────────┼────────┼─────────>
+             |                      |                   |        |
+             0                   2^-126              2^-125   2^-124
+
+             * * * * * * * * *      *   *   *   *      *   *    *    *
+             ^               ^      ^
+             0.            2^-149  2^-126 (smallest normalized)
+                      (smallest subnormal)
+```
+
+Without subnormals, any calculation producing a value smaller than $2^{-126}$ would immediately round to zero, causing abrupt precision loss. Subnormals smooth this transition by trading dynamic range (giving up the implicit leading `1`) for finer granularity near zero.
+
 ### Floating Point 32 and Floating Point 16
 
-FP32 and FP64 are the most common representations used in engineering and scientific applications. They are defined in the [IEEE 754 standard](https://en.wikipedia.org/wiki/IEEE_754) and they have been widely used for deep learning application with tons of support on all major libraries.
+FP32 and FP16 are defined in the [IEEE 754 standard](https://en.wikipedia.org/wiki/IEEE_754) and have been widely used for deep learning application with tons of support on all major libraries.  
 
 FP32 is a 32-bit representation, also known as single precision. In FP32, 8 bits are used for the exponent while 23 bits are used for the mantissa (`E8M23`).
 
 Over time, both industry and academia realized that neural networks are surprisingly resilient to noise, allowing the move to FP16. This shift to 16 bits halves memory footprint and increases throughput.
 
-Let's break down a concrete example with FP16. This format uses `E5M10`: 5 bits for the exponent and 10 bits for the mantissa. If we want to represent `3.14` using FP16, we find that we cannot represent the exact value—the closest representable number is `3.140625`.
+Let's break down a concrete example with FP16. This format uses `E5M10`: 5 bits for the exponent and 10 bits for the mantissa. Let's say we want to represent `3.14` using FP16. The first thing we'll find is that we cannot represent the exact value, but the closest representable number is `3.140625`.
 
 Looking at the bits:
 ```
-3.14 ≈ 3.140625 = 0.10000.1001001000 (binary)
+3.14 ≈ 3.140625 = 0.10000.1001001000 (FP16 bits)
                 = 0x4248 (hexadecimal)
 ```
 
-- `S=0`: the number is positive
-- `E=10000`: exponent is 16 in base 10, adjusted with `bias=15`, so the actual exponent is $16 - 15 = 1$
-- `M=1001001000`: the mantissa represents the fractional part of the normalized significand
+- `S = 0`: the number is positive
+- `E = 10000`: exponent is 16 in base 10, adjusted with `bias = 2^(5 - 1) - 1 = 15`, so the actual exponent is $16 - 15 = 1$
+- `M = 1001001000`: the mantissa represents the fractional part of the normalized significand
 
 Plugging these values into equation (1):
 
@@ -132,7 +153,7 @@ N = 0.10000.1001001000
 If we took instead the two closest representable FP numbers we would get:
 ```
 N_{+1} = 0.10000.1001001001 = 1 * 1.5712890625 * 2 = 3.142578125
-N      = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.14
+     N = 0.10000.1001001000 = 3.140625 <--- More accurate representation for 3.14
 N_{-1} = 0.10000.1001000111 = 1 * 1.5693359375 * 2 = 3.138671875
 ```
 
@@ -140,13 +161,13 @@ The gap between adjacent representable values is approximately 0.002—this is t
 
 ### bfloat16
 
-FP32, FP16, and FP64 are defined in the IEEE 754 standard and were standard for floating point arithmetic in deep learning for many years, until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by matching its 8 exponent bits, while using only 7 mantissa bits (compared to FP16's 10). The result is `E8M7`, a format that trades precision for range. This is a clever way to get the best of both worlds: faster training with enough range to handle large values that might otherwise cause numerical instabilities.
+FP32 first and FP16 later were standard for FP arithmetic in deep learning for many years, until 2017 when Google Brain introduced `bfloat16`. This format, championed by Google engineers for TPUs, kept the dynamic range of FP32 by matching its 8 exponent bits, while using only 7 mantissa bits (compared to FP16's 10). The result is `E8M7`, a format that trades some bits for precision for a wider dynamic range. This is a clever way to get the best of both worlds: faster training with enough range to handle large values that might otherwise cause numerical instabilities.
 
 <p align="center">
   <img src="figures/bfloat16.png" alt="bfloat16 format" width="400"/>
 </p>
 
-**Figure 3.** *Jeff Dean's X post explaining the bfloat16 format. (Source: [X Thread by Jeff Dean on bfloat16](https://x.com/JeffDean/status/1134523127357161473))*
+**Figure 3.** *Jeff Dean's post on Twitter/X explaining the bfloat16 format. (Source: [X Thread by Jeff Dean on bfloat16](https://x.com/JeffDean/status/1134523127357161473))*
 
 Let's see how `3.14` is represented in bfloat16. This format uses `E8M7`: 8 bits for the exponent (same as FP32, with `bias=127`) and 7 bits for the mantissa. The closest representable value to `3.14` is again `3.140625`.
 
@@ -157,22 +178,23 @@ Let's see how `3.14` is represented in bfloat16. This format uses `E8M7`: 8 bits
 
 The two closest representable bfloat16 numbers:
 ```
-N_{+1} = 0.10000000.1001010 = 1 * 1.578125 * 2 = 3.15625
-N      = 0.10000000.1001001 = 1 * 1.5703125 * 2 = 3.140625 <--- More accurate representation for 3.14
-N_{-1} = 0.10000000.1001000 = 1 * 1.5625 * 2 = 3.125
+N_{+1} = 0.10000000.1001010 = 1 * 1.578125  * 2 = 3.15625
+     N = 0.10000000.1001001 = 1 * 1.5703125 * 2 = 3.140625 <--- More accurate representation for 3.14
+N_{-1} = 0.10000000.1001000 = 1 * 1.5625    * 2 = 3.125
 ```
 
-Note that while bfloat16 results in the same representable value as FP16 for this specific example, bfloat16 generally has lower precision (7 mantissa bits vs. 10) in exchange for wider dynamic range. This is visible in the neighboring values: the gap between adjacent bfloat16 numbers (~0.016) is larger than for FP16 (~0.002). This coarser precision is acceptable for training because gradient updates are inherently noisy, but the wider range prevents overflow on large activation values.
+Note that while bfloat16 results in the same representable value as FP16 for this specific example, bfloat16 generally has lower precision (7 mantissa bits vs. 10) but a wider dynamic range. This is visible by inspecting the neighboring values: the gap between adjacent bfloat16 numbers (~0.016) is larger than for FP16 (~0.002). This coarser precision is acceptable for training because gradient updates are inherently noisy, but the wider range prevents overflow on large activation values.
 
 ### FP8
 
-As model sizes and training throughput demands continued to grow, bfloat16 became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8. FP8 training, formalized by [FP8 Formats for Deep Learning (Micikevicius et al. 2022)](https://arxiv.org/abs/2209.05433), became feasible at scale with the introduction of FP8 tensor cores in NVIDIA's Hopper (H100) architecture.
+As model sizes and training throughput demands continued to grow, bfloat16 alsp became a limiting factor due to memory bandwidth and compute density constraints. This motivated the transition toward FP8.  
+FP8 training, formalized by [FP8 Formats for Deep Learning (Micikevicius et al. 2022)](https://arxiv.org/abs/2209.05433), became feasible at scale with the introduction of FP8 tensor cores in NVIDIA's Hopper (H100) architecture.
 
 FP8 reduces the representation to 8 bits, typically implemented in two complementary formats: `E4M3` (prioritizing precision) and `E5M2` (prioritizing dynamic range). On modern GPUs, FP8 is tightly integrated with Tensor Cores, enabling significantly higher arithmetic throughput compared to FP16 or BF16. By halving the data size again, FP8 allows more operands to be processed per cycle, increasing arithmetic intensity and reducing memory traffic—two critical factors for scaling large-model training.
 
 However, these gains come with important trade-offs. The reduced mantissa and exponent budgets make FP8 more sensitive to numerical noise, overflow, and underflow. As a result, FP8 training typically relies on explicit scaling strategies, careful format selection (`E4M3` vs. `E5M2`), and higher-precision accumulation (often FP16 or FP32) to maintain stability and convergence.
 
-**Why is 8-bit harder than 16-bit?** Consider the quantization error. With FP16's 10 mantissa bits, we have 1024 distinct values between consecutive powers of two. With FP8 E4M3's 3 mantissa bits, we have only 8. This means the average rounding error increases by ~128×. At 4 bits, the problem becomes even more severe—we're down to just 2 mantissa bits (4 values between powers of two), making careful scaling essential for survival.
+**Why is 8-bit harder than 16-bit?** Consider the quantization error. With FP16's 10 mantissa bits, we have 2^10 = 1024 distinct values between consecutive powers of two (within each binade). With FP8 E4M3's 3 mantissa bits, we have only 2^3 = 8 values. This means the average rounding error increases by 128×. At 4 bits, the problem becomes even more severe since NVFP4 E2M1 has just 1 mantissa bit, giving only $2^1 = 2$ distinct values per binade. This 512× reduction in granularity (compared to FP16) makes careful scaling absolutely essential for numerical stability.
 
 Moving to FP8 requires sophisticated orchestration of different numerical formats. DeepSeek garnered attention partly for releasing their FP8 training recipe for the DeepSeek-V3 base model. In their [technical report](https://arxiv.org/abs/2412.19437), they detail their customized mixed-precision strategy.
 
@@ -203,7 +225,7 @@ How it works:
 2. **Shared per-block scale:** The hardware finds the maximum absolute value in each block to determine a shared 8-bit exponent.
 3. **Local quantization:** Individual elements are quantized to 4 bits relative to their block's scale.
 
-A simple example (real blocks use 32 elements): Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized. 
+As a simple example, consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`  (real blocks use 32 elements). With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized. 
 This compartmentalization of numerical noise is the key breakthrough enabling training at 4-bit precision.
 
 ### NVFP4
