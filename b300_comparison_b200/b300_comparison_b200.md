@@ -13,8 +13,8 @@ The NVIDIA B200 and B300 are both part of the Blackwell architecture family. The
 | **FP16/BF16**                | 2.25 PFLOPS | 2.25 PFLOPS |
 | **TF32**                		 | 1.1 PFLOPS | 1.1 PFLOPS |
 | **FP32**                		 | 0.037 PFLOPS | 0.037 PFLOPS |
-| **GPU Memory**               | 180 GB HBM3E | **288 GB HBM3E** |
-| **GPU Memory Bandwidth**     | 7.7 TB/s | **8 TB/s** |
+| **GPU Memory**               | 180 GB HBM3E | **270 GB HBM3E** |
+| **GPU Memory Bandwidth**     | 7.7 TB/s | 7.7 TB/s** |
 | **NVLink bandwidth per GPU** | 1.8 TB/s | 1.8 TB/s |
 | **Max Thermal Design Power (TDP)** | Up to 1,000W | Up to **1,100W** |
 
