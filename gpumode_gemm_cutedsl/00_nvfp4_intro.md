@@ -128,6 +128,8 @@ While the OCP MX specification uses 32-element blocks, NVIDIA rely on a finer gr
 ![](figures/nvfp4.png)
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [2])
 
+**Figure 5.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown). Source [3].*
+
 Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper "Pretraining Large Language Models with NVFP4" [2].
 
 **1. 2D Block Scaling**  
@@ -211,9 +213,6 @@ The memory hierarchy in GPUs is organised as follows:
 # Computation of Data: Visualizing the bits flow
 Excluding L2 and GMEM, the rest of the memory we describe above is placed inside the SM, which also houses the specialized compute units and optimized datapaths that allow for high-throughput matrix operations.
 
-![](figures/sm_breakdown.webp)
-**Figure 6.** *Look inside Blackwell SM* (Source [4]) <!-- mention in the main text and add a proper description to the figure but keep it short-->
-
 1) **Tensor Cores**: Tensor Cores are the fundamental parts of the GPU that facilitate MMA instructions on small tiles. NVIDIA introduced these hardware cores in 2017 to rival Google's 2016 release of their systolic array TPUs. 
 The earliest Tensor Core, introduced in Volta architecture, was only able to handle FP16 data types and operate on matrices with size of 4x4x4. Moreover, it was not sparse and received data slowly from SMEM and register files. 
 Four generations later, each iteration increased the computation-to-memory ratio and added support for smaller precision types. The 5th generation of Tensor Cores in Blackwell can handle low-precision FP4, use CTA pairs on a single SM, and include TMEM to reduce pressure on SMEM.
@@ -221,6 +220,10 @@ Four generations later, each iteration increased the computation-to-memory ratio
 2) **Warp Schedulers**: A warp consists of 32 threads, and the scheduler issues instructions to all 32 per clock cycle.
 
 3) **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LD/ST unit stays idle. 
+
+<img src="figures/sm_breakdown.webp" width="600">
+
+**Figure 1 - Look inside Blackwell SM** Source [5].
 
 <!--![](figures/thread_block_cluster.webp)
 **Figure 1. Thread blocks** Source [5].
