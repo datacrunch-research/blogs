@@ -43,7 +43,7 @@ As an example, if we want to represent $\pi$ with a fixed number of decimal digi
 Both approximations are using the same budget in terms of digits but they are achieving a different accuracy in representing the value we want to use in our computations.  
 If we would like to use more digits, we could end up with more accurate representations but sometimes also less accurate even if more precise representations. Let's clarify with an example. If we use six digits we could for instance end up storing:
 
-3. $\hat{\pi}_3 = 3.141543$, which has an absolute error of $|\pi - \hat{\pi}_3| \approx 0,00005$,
+3. $\hat{\pi}_3 = 3.141543$, which has an absolute error of $|\pi - \hat{\pi}_3| \approx 0.00005$,
 4. $\hat{\pi}_4 = 3.142738$, which has an absolute error of $|\pi - \hat{\pi}_4| \approx 0.00115$.
 
 As we can see in Figure 2, the value we $\hat{\pi}_i$ try to capture a good approximation of the real value of $\pi$ and varying the budget for our representation we will end up with different solutions and tradeoffs.
@@ -183,7 +183,7 @@ History of NVDA GPU Architecture
 A prerequisite for writing performant GPU kernels is to understand the hardware architecture inside the GPU and how data flows through it. A GPU is optimized for exactly two operations: arithmetic operations on data, and the movement/storage of that data between hierarchical memory pools. The efficiency of the former is bounded by transistor physics; the efficiency of the latter is bounded by the speed of light and wire capacitance. 
 
 > [!NOTE]
-> The following information is based on the Blackwell architecture of the B200 GPU, and all further mentions of 'GPU' refers to the B200. 
+> The following information is based on the Blackwell architecture of the B200 GPU, and all further mentions of 'GPU' refer to the B200. 
 > When we speak about matrix multiplication, the operation we refer to has the form: 
 `D = A * B` or `D = A * B + C`
 
