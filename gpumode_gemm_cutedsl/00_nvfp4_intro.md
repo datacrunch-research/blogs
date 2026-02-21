@@ -6,7 +6,7 @@ In this blogposts series, we will look into the latest NVIDIA NVFP4, a 4-bit flo
 
 ## Making Data Smaller
 
-NVFP4 is an innovative 4-bit floating point format introduced with the NVIDIA Blackwell GPU architecture. NVFP4 builds on the concept of low-bit microscaling floating-point formats (MX Formats) [2] and enhances the OCP MXFP4 by introducing a different scaling pattern.
+NVFP4 is an innovative 4-bit floating point format introduced with the NVIDIA Blackwell GPU architecture. NVFP4 builds on the concept of low-bit microscaling floating-point formats (MX Formats) [1] and enhances the OCP MXFP4 by introducing a different scaling pattern.
 
 One of the crucial points to keep in mind when dealing with floating points is that we have to deal with a fixed budget: the number of bits used. To understand the tradeoffs introduced by this constraint, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
 - **Dynamic range**, controlled by the **exponent** (E) bits, determines the scale of the number we are trying to represent, aka how large or how small a number can be (e.g., from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow. The dynamic range of an FP format can be quantified using binades. 
@@ -72,13 +72,12 @@ Let's break down the formula:
 - The sign bit (`S`) determines if the number is positive (`S = 0`) or negative (`S = 1`).
 - The exponent (`E`) is an integer representing the power of 2, adjusted by the $\text{bias}$ term. The exponent gives us the dynamic range, meaning which slice of the real number line we are sampling.
 - The mantissa (`M`) or significand is a binary number representing the precision; if the exponent gives us the scale, the mantissa tells us which sample we are taking from that slice of the real number line.
-- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, allowing to simplify hardware complexity, improve performance, and reserve in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
-
+- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, which simplifies hardware complexity, improves performance, and represents in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on.
 
 When the exponent field is all zeros (`E = 0`), the number becomes subnormal (also called denormalized). Instead of an implicit leading `1`, subnormals use an implicit leading `0`, forming significands like `0.1001001000`.  The subnormal floats are a linearly spaced set of values, which span the gap between the negative and positive normal floats.
-This provides a gradual underflow to zero rather than an abrupt jump and prevents underflows.
+This provides a gradual underflow to zero rather than an abrupt jump and mitigates underflows.
 
 For FP32, the smallest normalized number is approximately $2^{-126}$ (with significand `1.0`). Subnormals fill the gap between zero and this value, with the smallest subnormal being approximately $2^{-149}$ (significand `0.00...01` with 23 mantissa bits).
 
@@ -103,7 +102,7 @@ Without subnormals, any calculation producing a value smaller than $2^{-126}$ wo
 
 While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit. At these precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
 
-To make this low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [2].
+To make this low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [1].
 
 The core idea is moving from per-tensor to per-block scaling. Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements), each with its own shared 8-bit scale exponent.  
 How it works:
@@ -127,9 +126,9 @@ With only **16 unique values** available in a 4-bit representation, careful scal
 While the OCP MX specification uses 32-element blocks, NVIDIA rely on a finer granularity: **16-element blocks**. By calculating the shared scale factor over fewer elements, NVFP4 confines outliers more tightly, i.e., a single spike distorts a smaller neighborhood, preserving fidelity in surrounding weights.
 
 ![](figures/nvfp4.png)
-**Figure 5.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown). Source [3].*
+**Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [2])
 
-Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper "Pretraining Large Language Models with NVFP4" [3].
+Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper "Pretraining Large Language Models with NVFP4" [2].
 
 **1. 2D Block Scaling**  
 Scaling is applied along both **row-wise** and **column-wise** dimensions for weight matrices (16×16 blocks). Why both? During forward pass, scaling happens along rows; during backward pass, tensors are transposed, so scaling happens along columns. Without 2D scaling, the same weight would have two different quantized representations, breaking the chain rule and degrading training quality.
@@ -162,7 +161,7 @@ where $p = \frac{x - \lfloor x \rfloor}{\lceil x \rceil - \lfloor x \rfloor}$
 This ensures that **on average**, the expected value of the rounded number equals the original. Over many operations, rounding errors cancel out rather than accumulate in one direction, allowing gradient descent to converge correctly despite the severe quantization.
 
 ![](figures/nvfp4_training.png)
-**Figure 6.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. Source [3].*
+**Figure 4.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. Source [2].*
 
 
 <!--
@@ -199,7 +198,7 @@ The memory hierarchy in GPUs is organised as follows:
 
 2) **Tensor Memory (TMEM)**: An update introduced to the Blackwell architecture, containing 256KB per SM of dedicated SRAM accessible by Tensor Cores (more on these later). These play an important role in GEMM, so visualizing them is crucial. They are 2D matrices, 512 columns and 128 rows, or lanes, of 32-bit cells. TMEM functions as a loading dock for matrix multiply accumulate (MMA) tiles. Their introduction abstracts away from hardware cache prediction and gives the ability to manually control access patterns of tensor tiles. TMEM allows matrix `A` to be located in TMEM or SMEM, matrix `B` must be in SMEM, and the accumulator must be in TMEM.
 ![](figures/tensor-memory-layout.png)
-**Figure 3 - TMEM** Source [4].
+**Figure 5.** *TMEM* (Source [3]) <!-- mention in the main text and add a proper description to the figure but keep it short-->
 
 3) **Shared Memory (SMEM)** and **L1 Cache**: Unified 256KB SRAM structure per SM. Percentages of how much data each structure has can be manually controlled.
 
@@ -213,7 +212,7 @@ The memory hierarchy in GPUs is organised as follows:
 Excluding L2 and GMEM, the rest of the memory we describe above is placed inside the SM, which also houses the specialized compute units and optimized datapaths that allow for high-throughput matrix operations.
 
 ![](figures/sm_breakdown.webp)
-**Figure 1 - Look inside Blackwell SM** Source [5].
+**Figure 6.** *Look inside Blackwell SM* (Source [4]) <!-- mention in the main text and add a proper description to the figure but keep it short-->
 
 1) **Tensor Cores**: Tensor Cores are the fundamental parts of the GPU that facilitate MMA instructions on small tiles. NVIDIA introduced these hardware cores in 2017 to rival Google's 2016 release of their systolic array TPUs. 
 The earliest Tensor Core, introduced in Volta architecture, was only able to handle FP16 data types and operate on matrices with size of 4x4x4. Moreover, it was not sparse and received data slowly from SMEM and register files. 
@@ -221,10 +220,10 @@ Four generations later, each iteration increased the computation-to-memory ratio
 
 2) **Warp Schedulers**: A warp consists of 32 threads, and the scheduler issues instructions to all 32 per clock cycle.
 
-3) **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LT/ST unit stays idle. 
+3) **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LD/ST unit stays idle. 
 
 <!--![](figures/thread_block_cluster.webp)
-**Figure 1. Thread blocks** Source [6].
+**Figure 1. Thread blocks** Source [5].
 
 blackwell tensorcores [7]
 
@@ -232,9 +231,9 @@ tensorcore architecture and big O notation [8]-->
 
 ## Links
 
-1. https://openrouter.ai/state-of-ai
-2. https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf
-3. https://arxiv.org/abs/2509.25149
+0. https://openrouter.ai/state-of-ai
+1. https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf
+2. https://arxiv.org/abs/2509.25149
 4. https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tensor-memory-addressing
 5. https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/
 6. https://research.colfax-intl.com/cutlass-tutorial-gemm-with-thread-block-clusters-on-nvidia-blackwell-gpus/
