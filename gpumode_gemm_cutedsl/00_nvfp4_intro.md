@@ -9,7 +9,7 @@ In this blogposts series, we will look into the latest NVIDIA NVFP4, a 4-bit flo
 NVFP4 is an innovative 4-bit floating point format introduced with the NVIDIA Blackwell GPU architecture. NVFP4 builds on the concept of low-bit microscaling floating-point formats (MX Formats) [1] and enhances the OCP MXFP4 by introducing a different scaling pattern.
 
 One of the crucial points to keep in mind when dealing with floating points is that we have to deal with a fixed budget: the number of bits used. To understand the tradeoffs introduced by this constraint, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
-- **Dynamic range**, controlled by the **exponent** (E) bits, determines the scale of the number we are trying to represent, aka how large or how small a number can be (e.g., from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow. The dynamic range of an FP format can be quantified using binades. 
+- **Dynamic range**, controlled by the **exponent** (E) bits, determines the scale of the number we are trying to represent, that is how large or how small a number can be (e.g., from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow. The dynamic range of an FP format can be quantified using binades. 
 - **Precision**, controlled by the **mantissa** (M) bits, refers to the density of samples on the real number line $\mathbb{R}$.
 - **Accuracy** measures the error between the stored number in the chosen representation and the actual real number.
 
@@ -30,23 +30,23 @@ One of the crucial points to keep in mind when dealing with floating points is t
 > | FP8 E5M2 | 5 | ~32 | Needed for backward pass |
 > | FP4 E2M1 | 2 | ~3.6 | Needs additional tricks to work |
 > 
-> Going to 4 bits allows to get only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
+> Going to 4 bits yields only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
 ![](figures/fp_00.png)
-**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, BF16, FP8 which usually uses just with a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
+**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, BF16, FP8, which usually uses only a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
 
-As an example, if we want to represent $\pi$ with a fixed number of decimal digits we will end up with different approximations. We know that $\pi = 3.141592653\dots$, if we were limited with a budget of three digits we can have two choices:
+As an example, if we want to represent $\pi$ with a fixed number of decimal digits we will end up with different approximations. We know that $\pi = 3.141592653\dots$. If we were limited to a budget of three digits, we could have two choices:
 
 1. $\hat{\pi}_1 = 3.141$, which has an absolute error of $|\pi - \hat{\pi}_1| \approx 0.00059$,
 2. $\hat{\pi}_2 = 3.142$, which has an absolute error of $|\pi - \hat{\pi}_2| \approx 0.00041$.
 
-Both approximations are using the same budget in terms of digits but they are achieving a different accuracy in representing the value we want to use in our computations.  
+Both approximations use the same budget in terms of digits but they are achieving a different accuracy in representing the value we want to use in our computations.  
 If we would like to use more digits, we could end up with more accurate representations but sometimes also less accurate even if more precise representations. Let's clarify with an example. If we use six digits we could for instance end up storing:
 
 3. $\hat{\pi}_3 = 3.141543$, which has an absolute error of $|\pi - \hat{\pi}_3| \approx 0.00005$,
 4. $\hat{\pi}_4 = 3.142738$, which has an absolute error of $|\pi - \hat{\pi}_4| \approx 0.00115$.
 
-As we can see in Figure 2, the value we $\hat{\pi}_i$ try to capture a good approximation of the real value of $\pi$ and varying the budget for our representation we will end up with different solutions and tradeoffs.
+As we can see in Figure 2, the values $\hat{\pi}_i$ try to capture a good approximation of the real value of $\pi$; varying the budget for our representation leads to different solutions and tradeoffs.
 This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. 
 
 ![](figures/fp_01.png)
@@ -72,7 +72,7 @@ Let's break down the formula:
 - The sign bit (`S`) determines if the number is positive (`S = 0`) or negative (`S = 1`).
 - The exponent (`E`) is an integer representing the power of 2, adjusted by the $\text{bias}$ term. The exponent gives us the dynamic range, meaning which slice of the real number line we are sampling.
 - The mantissa (`M`) or significand is a binary number representing the precision; if the exponent gives us the scale, the mantissa tells us which sample we are taking from that slice of the real number line.
-- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, which simplifies hardware complexity, improves performance, and represents in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
+- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, which simplifies hardware complexity, improves performance, and reserves in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on.
 
@@ -102,7 +102,7 @@ Without subnormals, any calculation producing a value smaller than $2^{-126}$ wo
 
 While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit. At these precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
 
-To make this low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [1].
+To make these low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [1].
 
 The core idea is moving from per-tensor to per-block scaling. Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements), each with its own shared 8-bit scale exponent.  
 How it works:
@@ -123,12 +123,10 @@ NVFP4 is a 4-bit floating point format (`E2M1`):
 
 With only **16 unique values** available in a 4-bit representation, careful scaling becomes critical. To put this in perspective: FP32 can represent ~4 billion distinct positive values; NVFP4 can represent 8, approximately -6 to 6. For example, the values in the range could include 0.0, 0.5, 1.0, 1.5, 2, 3, 4, 6 (same for the negative range).
 
-While the OCP MX specification uses 32-element blocks, NVIDIA rely on a finer granularity: **16-element blocks**. By calculating the shared scale factor over fewer elements, NVFP4 confines outliers more tightly, i.e., a single spike distorts a smaller neighborhood, preserving fidelity in surrounding weights.
+While the OCP MX specification uses 32-element blocks, NVIDIA relies on a finer granularity: **16-element blocks**. By calculating the shared scale factor over fewer elements, NVFP4 confines outliers more tightly, i.e., a single spike distorts a smaller neighborhood, preserving fidelity in surrounding weights.
 
 ![](figures/nvfp4.png)
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [2])
-
-**Figure 5.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown). Source [3].*
 
 Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper "Pretraining Large Language Models with NVFP4" [2].
 
@@ -192,7 +190,7 @@ A prerequisite for writing performant GPU kernels is to understand the hardware 
 
 
 # Movement of Data: Physical Hierarchy
-The memory architecture of modern GPUs is a spatially organized response to the inverse relationship between latency and density in CMOS design. If they could, NVIDIA would place every compute unit adjacent to register-speed memory. Instead, contemporary GPUs pack 10^4-10^5 threads across 148 Streaming Multiprocessors (SMs) on 2 distinct dies, connected by a 10TB/s NV-HBI interconnect. The GPU places the fastest and smallest memory closest to compute hardware, and iteratively hosts larger but slower memory further away, maximizing aggregate throughput by minimizing latency.
+The memory architecture of modern GPUs is a spatially organized response to the inverse relationship between latency and density in CMOS design. If they could, NVIDIA would place every compute unit adjacent to register-speed memory. Instead, contemporary GPUs pack $10^4-10^5$ threads across 148 Streaming Multiprocessors (SMs) on 2 distinct dies, connected by a 10TB/s NV-HBI interconnect. The GPU places the fastest and smallest memory closest to compute hardware, and iteratively hosts larger but slower memory further away, maximizing aggregate throughput by minimizing latency.
 
 The memory hierarchy in GPUs is organised as follows:
 
@@ -200,7 +198,7 @@ The memory hierarchy in GPUs is organised as follows:
 
 2) **Tensor Memory (TMEM)**: An update introduced to the Blackwell architecture, containing 256KB per SM of dedicated SRAM accessible by Tensor Cores (more on these later). These play an important role in GEMM, so visualizing them is crucial. They are 2D matrices, 512 columns and 128 rows, or lanes, of 32-bit cells. TMEM functions as a loading dock for matrix multiply accumulate (MMA) tiles. Their introduction abstracts away from hardware cache prediction and gives the ability to manually control access patterns of tensor tiles. TMEM allows matrix `A` to be located in TMEM or SMEM, matrix `B` must be in SMEM, and the accumulator must be in TMEM.
 ![](figures/tensor-memory-layout.png)
-**Figure 5.** *TMEM* (Source [3]) <!-- mention in the main text and add a proper description to the figure but keep it short-->
+**Figure 5.** *Tensor Memory (TMEM) layout: 512 columns × 128 rows of 32-bit cells per SM, serving as a loading dock for MMA tiles.* (Source [3])
 
 3) **Shared Memory (SMEM)** and **L1 Cache**: Unified 256KB SRAM structure per SM. Percentages of how much data each structure has can be manually controlled.
 
@@ -223,7 +221,7 @@ Four generations later, each iteration increased the computation-to-memory ratio
 
 <img src="figures/sm_breakdown.webp" width="600">
 
-**Figure 1 - Look inside Blackwell SM** Source [5].
+**Figure 6.** *Breakdown of the Streaming Multiprocessor (SM) in the Blackwell architecture* (Source [5])
 
 <!--![](figures/thread_block_cluster.webp)
 **Figure 1. Thread blocks** Source [5].
@@ -234,11 +232,11 @@ tensorcore architecture and big O notation [8]-->
 
 ## Links
 
-0. https://openrouter.ai/state-of-ai
+<!-- 0. https://openrouter.ai/state-of-ai Is this still relevant? -->
 1. https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf
 2. https://arxiv.org/abs/2509.25149
-4. https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tensor-memory-addressing
-5. https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/
-6. https://research.colfax-intl.com/cutlass-tutorial-gemm-with-thread-block-clusters-on-nvidia-blackwell-gpus/
-7. https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247493056&idx=1&sn=1c6025f97df16a3b9576746b7944538e&chksm=f995f502cee27c145677e91761ebec0d59cde82d4562c463070f2c72efb3751567bac934c266&scene=178&cur_album_id=2538479717163761664&search_click_id=#rd
-8. https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247491424&idx=1&sn=0fc2110931b27714900e78d73b11a5b5&scene=21&poc_token=HOHnjWmj8OCvlO9eiSxuNJMDxVEsmgh7A4q_qNIq
+3. https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tensor-memory-addressing
+4. https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/
+5. https://research.colfax-intl.com/cutlass-tutorial-gemm-with-thread-block-clusters-on-nvidia-blackwell-gpus/
+6. https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247493056&idx=1&sn=1c6025f97df16a3b9576746b7944538e&chksm=f995f502cee27c145677e91761ebec0d59cde82d4562c463070f2c72efb3751567bac934c266&scene=178&cur_album_id=2538479717163761664&search_click_id=#rd
+7. https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247491424&idx=1&sn=0fc2110931b27714900e78d73b11a5b5&scene=21&poc_token=HOHnjWmj8OCvlO9eiSxuNJMDxVEsmgh7A4q_qNIq
