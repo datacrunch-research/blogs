@@ -1,8 +1,10 @@
-# Huang's Law, not Moore's Law
+# NVFP4 Explained: How NVIDIA Blackwell Unlocks Low-Precision Floating Point
+
+In this mini-series, we explore NVIDIA NVFP4, a 4-bit floating point format introduced with the Blackwell architecture. In this first part, we focus on what makes NVFP4 practical. In Part 2, we will cover how to write a GEMM kernel for B200 using CuTeDSL.
+
+## From Moore's Law to Huang's Law
 
 Moore's Law, traditionally described as the transistor count doubling about every two years, is slowing. As a result, the performance gains of a single GPU chip will eventually reach saturation. At the same time, demand for computing power is accelerating, which drives the need for more efficient GPUs. Jensen Huang, NVIDIA's CEO, notably observed that GPU capabilities have been advancing much faster than those of CPUs (Huang's Law [[1]](https://en.wikipedia.org/wiki/Huang's_law)). As the semiconductor industry approaches the physical limits of transistor scaling, engineers increasingly focus on architecture, packaging, and circuit design to reduce the energy and area required for each computation, thereby improving performance per Watt and overall efficiency.
-
-In this blogposts series, we will look into the latest NVIDIA NVFP4, a 4-bit floating point format introduced with NVIDIA Blackwell architectures. In Part 1, our goal will be to understand what is needed to make NVFP4 practical, while Part 2 will focus on how to write a GEMM kernel for B200 using CuTeDSL.
 
 ## Making Data Smaller
 
@@ -15,7 +17,7 @@ One of the crucial points to keep in mind when dealing with floating points is t
 
 
 > [!NOTE]
-> **Measuring Dynamic Range with Binades**
+> **Dynamic Range in FP32, FP16, FP8, and FP4**
 > 
 > A binade is one power of 2 of dynamic range, essentially how many binary numbers sharing the same sign and exponent bits fit between the smallest and largest representable values:
 > 
@@ -113,7 +115,7 @@ How it works:
 A simple example (real blocks use 32 elements): Consider a block of 4 values: `[0.001, 0.002, 100.0, 0.003]`. With per-tensor scaling, the scale would be dominated by `100.0`, and the small values would all round to zero. With per-block scaling, if this block gets its own scale, the outlier only affects these 4 neighbors; the rest of the tensor remains well-quantized. 
 This compartmentalization of numerical noise is the key breakthrough enabling training at 4-bit precision.
 
-### NVFP4
+### What Is NVFP4?
 Building on the MX foundation, NVIDIA developed NVFP4 for their Blackwell architecture, adding hardware-specific refinements to push the limits of low-bit training.  
 
 NVFP4 is a 4-bit floating point format (`E2M1`):
@@ -127,6 +129,8 @@ While the OCP MX specification uses 32-element blocks, NVIDIA relies on a finer 
 
 ![](figures/nvfp4.png)
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [[3]](https://arxiv.org/abs/2509.25149))
+
+### Algorithmic Interventions in NVFP4
 
 Hardware support is only half the story. Training a model in 4-bit precision without diverging into noise requires specific algorithmic interventions, as detailed in NVIDIA's paper "Pretraining Large Language Models with NVFP4" [[3]](https://arxiv.org/abs/2509.25149).
 
@@ -230,6 +234,12 @@ blackwell tensorcores [7]
 
 tensorcore architecture and big O notation [8]-->
 
+
+## Conclusion
+
+The drive for efficiency continues to push AI workloads toward low-bit formats. NVFP4, introduced by NVIDIA for the Blackwell architecture, makes 4-bit floating point viable through hardware-algorithm co-design.
+
+In Part 2 of this mini-series, we'll show how to write a GEMM kernel for B200 using CuTeDSL.
 
 ## Links
 
