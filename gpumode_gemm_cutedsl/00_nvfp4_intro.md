@@ -80,7 +80,7 @@ For FP32, the smallest normalized number is approximately $2^{-126}$ (with signi
 
 Without subnormals, any calculation producing a value smaller than $2^{-126}$ would immediately round to zero, causing abrupt precision loss. Subnormals smooth this transition by trading dynamic range (giving up the implicit leading `1`) for finer granularity near zero.
 
-To make this concrete, consider FP4 E2M1 (1 sign, 2 exponent, 1 mantissa bit). Ignoring the sign bit, the 8 positive bit patterns yield only 7 distinct values: `0, 0.5, 1, 1.5, 2, 3, 4, 6`. In an IEEE-style format, the all-ones exponent (`11`) would be reserved for `Inf` and `NaN`, costing us the two largest values (4.0 and 6.0) — an unacceptable loss at 4 bits. This is why FP4 E2M1 does not reserve any bit pattern for special values. Other low-bit formats make a similar trade-off, using naming conventions like `E4M3fn` (no `Inf`/`NaN`) or `E4M3fnuz` (also no negative zero) to signal the absence of special values.
+To make this concrete, consider FP4 E2M1 (1 sign, 2 exponent, 1 mantissa bit). Ignoring the sign bit, the 8 bit patterns for non-negative numbers represent 8 distinct values: `0, 0.5, 1, 1.5, 2, 3, 4, 6`. In an IEEE-style format, the all-ones exponent (`11`) would be reserved for `Inf` and `NaN`, costing us the two largest values (4.0 and 6.0) — an unacceptable loss at 4 bits. This is why FP4 E2M1 does not reserve any bit pattern for special values. Other low-bit formats make a similar trade-off, using naming conventions like `E4M3fn` (no `Inf`/`NaN`) or `E4M3fnuz` (also no negative zero) to signal the absence of special values.
 
 ### Microscaling (MX) Formats
 
@@ -144,7 +144,7 @@ $$\mathbb{E}[\text{Round}(x)] = x$$
 $$
 \text{Round}(x) = 
 \begin{cases} 
-    \lfloor x \rfloor & \text{with probability } 1-p  
+    \lfloor x \rfloor & \text{with probability } 1-p  \\
     \lceil x \rceil & \text{with probability } p
 \end{cases}
 $$
@@ -153,6 +153,7 @@ where $p = \frac{x - \lfloor x \rfloor}{\lceil x \rceil - \lfloor x \rfloor}$
 
 This ensures that **on average**, the expected value of the rounded number equals the original. Over many operations, rounding errors cancel out rather than accumulate in one direction, allowing gradient descent to converge correctly despite the severe quantization.
 
+![](figures/nvfp4_training.png)
 
 **Figure 4.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. Source [[3]](https://arxiv.org/abs/2509.25149).*
 
