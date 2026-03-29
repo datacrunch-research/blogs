@@ -115,6 +115,7 @@ There is an important cost consideration: since every block needs its own scale 
 NVFP4 departs from MX in two key ways. First, it uses `E4M3` scale factors instead of `E8M0`. The 3 mantissa bits allow the scale to represent the block maximum more precisely — not just the nearest power of two but fractional values in between. Much of NVFP4's quality advantage over MXFP4 comes from this more fine-grained scale factor. Second, NVIDIA uses **16-element blocks** instead of 32. Smaller blocks confine outliers more tightly — a single spike distorts a smaller neighborhood — but they also increase scale factor overhead: 8 bits per 16 elements means 0.5 bits per element, bringing the effective storage to **4.5 bits per weight**. A per-tensor FP32 scale factor is also applied on top.
 
 
+![](figures/nvfp4.png)
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [[3]](https://arxiv.org/abs/2509.25149))
 
 ### Algorithmic Interventions in NVFP4
@@ -192,6 +193,8 @@ Four generations later, each iteration increased the computation-to-memory ratio
 3. **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LD/ST unit stays idle.
 
 
+
+<img src="figures/sm_breakdown.webp" width="600">
 
 **Figure 6.** *Breakdown of the Streaming Multiprocessor (SM) in the Blackwell architecture* (Source [[5]](https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/))
 
