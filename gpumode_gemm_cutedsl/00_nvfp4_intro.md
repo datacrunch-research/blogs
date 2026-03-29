@@ -25,34 +25,24 @@ One of the crucial points to keep in mind when dealing with floating points is t
 > 
 > | Format | Exponent Bits | Binades | |
 > |--------|---------------|---------| ---------|
-> | FP32 | 8 | ~277 | Good for most computations |
-> | FP16 | 5 | ~40 | Good for most activations |
-> | BF16 | 8 | ~261 | Same FP32 range, but limited precision |
-> | FP8 E4M3 | 4 | ~18 | Suitable for forward pass |
-> | FP8 E5M2 | 5 | ~32 | Needed for backward pass |
-> | FP4 E2M1 | 2 | ~3.6 | Needs additional tricks to work |
+> | FP64 | 11 | ~2098 | Used in scientific simulations (e.g., physics, RL environments), generally not used for ML training |
+> | FP32 | 8 | ~277 | Default precision; no Tensor Core support (use TF32 instead) |
+> | TF32 | 8 | ~264 | Same exponent as FP32, 10-bit mantissa; transparent Tensor Core acceleration for FP32 operations |
+> | FP16 | 5 | ~40 | Good for most activations; requires loss scaling for gradient computation |
+> | BF16 | 8 | ~261 | Same exponent as FP32 (so same normal range), but fewer subnormal binades due to 7-bit mantissa; limited precision |
+> | FP8 E4M3 | 4 | ~18 | Suitable for forward pass; also viable for backward pass with at least tensor scaling |
+> | FP8 E5M2 | 5 | ~32 | Commonly used for backward pass due to wider range |
+> | FP4 E2M1 | 2 | ~3.6 | Needs block scaling and algorithmic tricks to work |
 > 
 > Going to 4 bits yields only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
 ![](figures/fp_00.png)
-**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32, BF16, FP8, which usually uses only a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
+**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32; FP16, whose limited range requires loss scaling (built into `torch.amp`) for gradient computation; BF16; FP8, which usually uses only a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
 
-As an example, if we want to represent $\pi$ with a fixed number of decimal digits we will end up with different approximations. We know that $\pi = 3.141592653\dots$. If we were limited to a budget of three digits, we could have two choices:
-
-1. $\hat{\pi}_1 = 3.141$, which has an absolute error of $|\pi - \hat{\pi}_1| \approx 0.00059$,
-2. $\hat{\pi}_2 = 3.142$, which has an absolute error of $|\pi - \hat{\pi}_2| \approx 0.00041$.
-
-Both approximations use the same budget in terms of digits but they are achieving a different accuracy in representing the value we want to use in our computations.  
-If we would like to use more digits, we could end up with more accurate representations but sometimes also less accurate even if more precise representations. Let's clarify with an example. If we use six digits we could for instance end up storing:
-
-3. $\hat{\pi}_3 = 3.141543$, which has an absolute error of $|\pi - \hat{\pi}_3| \approx 0.00005$,
-4. $\hat{\pi}_4 = 3.142738$, which has an absolute error of $|\pi - \hat{\pi}_4| \approx 0.00115$.
-
-As we can see in Figure 2, the values $\hat{\pi}_i$ try to capture a good approximation of the real value of $\pi$; varying the budget for our representation leads to different solutions and tradeoffs.
-This simple example shows clearly that the choice of numerical representation greatly affects the outcome of computations. 
+Why does this distinction matter? More bits (higher precision) do not automatically mean a more accurate result. Consider representing $\pi = 3.141592653\dots$ with a fixed digit budget. With three digits we might store $\hat{\pi}_1 = 3.141$ (error $\approx 0.00059$) or $\hat{\pi}_2 = 3.142$ (error $\approx 0.00041$) — same precision, different accuracy. With six digits we could store $\hat{\pi}_3 = 3.141543$ (error $\approx 0.00005$), but also $\hat{\pi}_4 = 3.142738$ (error $\approx 0.00115$) — more precise, yet less accurate than the three-digit $\hat{\pi}_2$. The takeaway: when we reduce the bit budget for a floating point format, we must choose carefully how to allocate bits between exponent and mantissa, because neither precision nor range alone guarantees accuracy.
 
 ![](figures/fp_01.png)
-**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation, e.g., more decimal digits here, does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
+**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation, we can sample the real line using three bit fields:
@@ -65,9 +55,11 @@ The mathematical representation is defined as:
 
 $$
 \begin{equation}
-N = (-1)^{S} \times 1.M \times 2^{E - \text{bias}}
+N = (-1)^{S} \times \left(1 + \frac{m}{2^M}\right) \times 2^{E - \text{bias}}
 \end{equation}
 $$
+
+where $m$ is the integer value of the mantissa bits and $M$ is the number of mantissa bits. This is equivalent to writing $(-1)^S \times 1.b_1 b_2 \dots b_M \times 2^{E-\text{bias}}$, where the `1.` is the implicit leading bit and the $b_i$ are the mantissa bits.
 
 Let's break down the formula:
 
@@ -83,26 +75,13 @@ This provides a gradual underflow to zero rather than an abrupt jump and mitigat
 
 For FP32, the smallest normalized number is approximately $2^{-126}$ (with significand `1.0`). Subnormals fill the gap between zero and this value, with the smallest subnormal being approximately $2^{-149}$ (significand `0.00...01` with 23 mantissa bits).
 
-```
-Number Line Around Zero (FP32 example):
-
-Exponent:    E=0 (subnormal)         E=1 (normalized)    E=2      E=3
-             ├──────────────────────┼───────────────────┼────────┼─────────>
-             |                      |                   |        |
-             0                   2^-126              2^-125   2^-124
-
-             * * * * * * * * *      *   *   *   *      *   *    *    *
-             ^               ^      ^
-             0.            2^-149  2^-126 (smallest normalized)
-                      (smallest subnormal)
-```
-
 Without subnormals, any calculation producing a value smaller than $2^{-126}$ would immediately round to zero, causing abrupt precision loss. Subnormals smooth this transition by trading dynamic range (giving up the implicit leading `1`) for finer granularity near zero.
 
+To make this concrete, consider FP4 E2M1 (1 sign, 2 exponent, 1 mantissa bit). Ignoring the sign bit, the 8 positive bit patterns yield only 7 distinct values: `0, 0.5, 1, 1.5, 2, 3, 4, 6`. In an IEEE-style format, the all-ones exponent (`11`) would be reserved for `Inf` and `NaN`, costing us the two largest values (4.0 and 6.0) — an unacceptable loss at 4 bits. This is why FP4 E2M1 does not reserve any bit pattern for special values. Other low-bit formats make a similar trade-off, using naming conventions like `E4M3fn` (no `Inf`/`NaN`) or `E4M3fnuz` (also no negative zero) to signal the absence of special values.
 
 ### Microscaling (MX) Formats
 
-While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, the desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit. At these precisions, standard per-tensor scaling breaks down. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
+While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, it already required group-wise scaling implemented in software at the cost of increasing performance cost. The desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit, where scaling becomes even more critical. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
 
 To make these low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [[2]](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
@@ -123,9 +102,11 @@ NVFP4 is a 4-bit floating point format (`E2M1`):
 - Exponent: 2 bits
 - Mantissa: 1 bit (plus one implicit)
 
-With only **16 unique values** available in a 4-bit representation, careful scaling becomes critical. To put this in perspective: FP32 can represent ~4 billion distinct positive values; NVFP4 can represent 8, approximately -6 to 6. For example, the values in the range could include 0.0, 0.5, 1.0, 1.5, 2, 3, 4, 6 (same for the negative range).
+With only **16 unique values** available in a 4-bit representation, careful scaling becomes critical. To put this in perspective: FP32 can represent ~4 billion distinct positive values; NVFP4 can represent only `0, ±0.5, ±1, ±1.5, ±2, ±3, ±4, ±6`.
 
-While the OCP MX specification uses 32-element blocks, NVIDIA relies on a finer granularity: **16-element blocks**. By calculating the shared scale factor over fewer elements, NVFP4 confines outliers more tightly, i.e., a single spike distorts a smaller neighborhood, preserving fidelity in surrounding weights.
+There is an important cost consideration: since every block needs its own scale factor, the scale factors themselves consume memory and arithmetic. If MX used a full FP32 scale per 32-element block, that would add 1 bit per element — making a nominally 4-bit format effectively 5 bits. The OCP MX specification addresses this by using an `E8M0` scale (8-bit, exponent-only), which limits overhead but can only represent powers of two, making the scale coarse.
+
+NVFP4 departs from MX in two key ways. First, it uses **`E4M3` scale factors** instead of `E8M0`. The 3 mantissa bits allow the scale to represent the block maximum more precisely — not just the nearest power of two but fractional values in between. Much of NVFP4's quality advantage over MXFP4 comes from this more fine-grained scale factor. Second, NVIDIA uses **16-element blocks** instead of 32. Smaller blocks confine outliers more tightly — a single spike distorts a smaller neighborhood — but they also increase scale factor overhead: 8 bits per 16 elements means 0.5 bits per element, bringing the effective storage to **4.5 bits per weight**. A per-tensor FP32 scale factor is also applied on top.
 
 ![](figures/nvfp4.png)
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [[3]](https://arxiv.org/abs/2509.25149))
