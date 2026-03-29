@@ -39,11 +39,13 @@ One of the crucial points to keep in mind when dealing with floating points is t
 > Going to 4 bits yields only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
 
-**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32; FP16, whose limited range requires loss scaling (built into `torch.amp`) for gradient computation; BF16; FP8, which usually uses only a tensor-scale factor. The `MXFP`* formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
+![](figures/fp_00.png)
+**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32; FP16, whose limited range requires loss scaling (built into `torch.amp`) for gradient computation; BF16; FP8, which usually uses only a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
 
 Why does this distinction matter? More bits (higher precision) do not automatically mean a more accurate result. Consider representing $\pi = 3.141592653\dots$ with a fixed digit budget. With three digits we might store $\hat{\pi}_1 = 3.141$ (error $\approx 0.00059$) or $\hat{\pi}_2 = 3.142$ (error $\approx 0.00041$) — same precision, different accuracy. With six digits we could store $\hat{\pi}_3 = 3.141543$ (error $\approx 0.00005$), but also $\hat{\pi}_4 = 3.142738$ (error $\approx 0.00115$) — more precise, yet less accurate than the three-digit $\hat{\pi}_2$. The takeaway: when we reduce the bit budget for a floating point format, we must choose carefully how to allocate bits between exponent and mantissa, because neither precision nor range alone guarantees accuracy.
 
 
+![](figures/fp_01.png)
 **Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation, we can sample the real line using three bit fields:
@@ -82,7 +84,7 @@ To make this concrete, consider FP4 E2M1 (1 sign, 2 exponent, 1 mantissa bit). I
 
 ### Microscaling (MX) Formats
 
-While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, it already required group-wise scaling implemented in software at the cost of increasing performance cost. The desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit, where scaling becomes even more critical. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
+While DeepSeek-V3 demonstrates that FP8 is viable with careful engineering, it already needed software-level group-wise scaling, adding overhead. The desire for efficiency pushed AI workloads toward even smaller formats like 6-bit or 4-bit, where scaling becomes even more critical. A single large outlier in a tensor of millions of parameters can skew the quantization scale, effectively pushing all smaller values to zero.
 
 To make these low-precision formats practical, a consortium of tech companies, including AMD, Arm, Intel, NVIDIA, and Qualcomm, aligned under the Open Compute Project (OCP) to introduce the specification of the Microscaling Formats [[2]](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf).
 
@@ -155,7 +157,7 @@ This ensures that **on average**, the expected value of the rounded number equal
 
 
 
-# GPU Architecture
+## GPU Architecture
 
 A prerequisite for writing performant GPU kernels is to understand the hardware architecture inside the GPU and how data flows through it. A GPU is optimized for exactly two operations: arithmetic operations on data, and the movement/storage of that data between hierarchical memory pools. The efficiency of the former is bounded by transistor physics; the efficiency of the latter is bounded by the speed of light and wire capacitance. 
 
@@ -164,7 +166,7 @@ A prerequisite for writing performant GPU kernels is to understand the hardware 
 > When we speak about matrix multiplication, the operation we refer to has the form: 
 > `D = A * B` or `D = A * B + C`
 
-# Movement of Data: Physical Hierarchy
+### Movement of Data: Physical Hierarchy
 
 The memory architecture of modern GPUs is a spatially organized response to the inverse relationship between latency and density in CMOS design. If they could, NVIDIA would place every compute unit adjacent to register-speed memory. Instead, contemporary GPUs pack $10^4-10^5$ threads across 148 Streaming Multiprocessors (SMs) on 2 distinct dies, connected by a 10TB/s NV-HBI interconnect. The GPU places the fastest and smallest memory closest to compute hardware, and iteratively hosts larger but slower memory further away, maximizing aggregate throughput by minimizing latency.
 
@@ -179,7 +181,7 @@ The memory hierarchy in GPUs is organised as follows:
 5. **Tensor Memory Accelerator (TMA)**: Introduced in Hopper to offload address-generation from the register file via descriptor-based async copy; refined in Blackwell with second-generation sub-byte quantization (FP4/FP6 unpacking) and CTA-pair semantics. This change in Blackwell architecture facilitates thread blocks sharing distributed SMEM and executing cooperative MMA across paired SMs.
 6. **VRAM (GMEM):** The largest but most distant and slowest memory tier in the hierarchy. For B200, it consists of 192GB of HBM3e stacked on the same substrate as the GPU dies. The GPU implements 8 memory stacks (4 per die), delivering an aggregate bandwidth of 8 TB/s.
 
-# Computation of Data: Visualizing the bits flow
+### Computation of Data: Visualizing the bits flow
 
 Excluding L2 and GMEM, the rest of the memory we describe above is placed inside the SM, which also houses the specialized compute units and optimized datapaths that allow for high-throughput matrix operations.
 
