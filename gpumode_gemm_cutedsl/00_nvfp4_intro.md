@@ -11,39 +11,40 @@ Moore's Law, traditionally described as the transistor count doubling about ever
 NVFP4 is an innovative 4-bit floating point format introduced with the NVIDIA Blackwell GPU architecture. NVFP4 builds on the concept of low-bit microscaling floating-point formats (MX Formats) [[2]](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf) and enhances the OCP MXFP4 by introducing a different scaling pattern.
 
 One of the crucial points to keep in mind when dealing with floating points is that we have to deal with a fixed budget: the number of bits used. To understand the tradeoffs introduced by this constraint, we must distinguish between three concepts that depend on how we allocate the bits of the representation:
+
 - **Dynamic range**, controlled by the **exponent** (E) bits, determines the scale of the number we are trying to represent, that is how large or how small a number can be (e.g., from $10^{-45}$ to $10^{38}$). With more E bits, we can represent a wider range, reducing the risk of overflow or underflow. The dynamic range of an FP format can be quantified using binades. 
 - **Precision**, controlled by the **mantissa** (M) bits, refers to the density of samples on the real number line $\mathbb{R}$.
 - **Accuracy** measures the error between the stored number in the chosen representation and the actual real number.
 
-
 > [!NOTE]
 > **Dynamic Range in FP32, FP16, FP8, and FP4**
-> 
+>
 > A binade is one power of 2 of dynamic range, essentially how many binary numbers sharing the same sign and exponent bits fit between the smallest and largest representable values:
-> 
+>
 > $$\text{binades} = \log_2\left(\frac{\text{max representable value}}{\text{min representable value}}\right)$$
-> 
-> | Format | Exponent Bits | Binades | |
-> |--------|---------------|---------| ---------|
-> | FP64 | 11 | ~2098 | Used in scientific simulations (e.g., physics, RL environments), generally not used for ML training |
-> | FP32 | 8 | ~277 | Default precision; no Tensor Core support (use TF32 instead) |
-> | TF32 | 8 | ~264 | Same exponent as FP32, 10-bit mantissa; transparent Tensor Core acceleration for FP32 operations |
-> | FP16 | 5 | ~40 | Good for most activations; requires loss scaling for gradient computation |
-> | BF16 | 8 | ~261 | Same exponent as FP32 (so same normal range), but fewer subnormal binades due to 7-bit mantissa; limited precision |
-> | FP8 E4M3 | 4 | ~18 | Suitable for forward pass; also viable for backward pass with at least tensor scaling |
-> | FP8 E5M2 | 5 | ~32 | Commonly used for backward pass due to wider range |
-> | FP4 E2M1 | 2 | ~3.6 | Needs block scaling and algorithmic tricks to work |
-> 
+>
+>
+> | Format   | Exponent Bits | Binades |                                                                                                                    |
+> | -------- | ------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+> | FP64     | 11            | ~2098   | Used in scientific simulations (e.g., physics, RL environments), generally not used for ML training                |
+> | FP32     | 8             | ~277    | Default precision; no Tensor Core support (use TF32 instead)                                                       |
+> | TF32     | 8             | ~264    | Same exponent as FP32, 10-bit mantissa; transparent Tensor Core acceleration for FP32 operations                   |
+> | FP16     | 5             | ~40     | Good for most activations; requires loss scaling for gradient computation                                          |
+> | BF16     | 8             | ~261    | Same exponent as FP32 (so same normal range), but fewer subnormal binades due to 7-bit mantissa; limited precision |
+> | FP8 E4M3 | 4             | ~18     | Suitable for forward pass; also viable for backward pass with at least tensor scaling                              |
+> | FP8 E5M2 | 5             | ~32     | Commonly used for backward pass due to wider range                                                                 |
+> | FP4 E2M1 | 2             | ~3.6    | Needs block scaling and algorithmic tricks to work                                                                 |
+>
+>
 > Going to 4 bits yields only 3.6 binades, which means it can't represent typical tensor value distributions, which often span 10-20 binades. This is precisely why block scaling becomes essential at 4-bit precision.
 
-![](figures/fp_00.png)
-**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32; FP16, whose limited range requires loss scaling (built into `torch.amp`) for gradient computation; BF16; FP8, which usually uses only a tensor-scale factor. The `MXFP*` formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
+
+**Figure 1.** *The figure summarizes the different floating point formats discussed in this post. Chronologically: FP32; FP16, whose limited range requires loss scaling (built into `torch.amp`) for gradient computation; BF16; FP8, which usually uses only a tensor-scale factor. The `MXFP`* formats use a 32-element block level `E8M0` (just the exponent of an FP32) scale factor, and finally NVFP4, which uses a combination of 16-element block-level fractional scaling `E4M3` and a full FP32 tensor-level scaling.*
 
 Why does this distinction matter? More bits (higher precision) do not automatically mean a more accurate result. Consider representing $\pi = 3.141592653\dots$ with a fixed digit budget. With three digits we might store $\hat{\pi}_1 = 3.141$ (error $\approx 0.00059$) or $\hat{\pi}_2 = 3.142$ (error $\approx 0.00041$) — same precision, different accuracy. With six digits we could store $\hat{\pi}_3 = 3.141543$ (error $\approx 0.00005$), but also $\hat{\pi}_4 = 3.142738$ (error $\approx 0.00115$) — more precise, yet less accurate than the three-digit $\hat{\pi}_2$. The takeaway: when we reduce the bit budget for a floating point format, we must choose carefully how to allocate bits between exponent and mantissa, because neither precision nor range alone guarantees accuracy.
 
-![](figures/fp_01.png)
-**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
+**Figure 2.** *Illustration of precision vs. accuracy using different approximations of $\pi$. A more precise representation (more decimal digits) does not necessarily mean higher accuracy (closer to the true value). The three examples show: `3.141` (low precision, moderate accuracy), `3.141543` (higher precision and accuracy), and `3.142738` (higher precision but lower accuracy than `3.141`).*
 
 The real number line allows for infinite precision, but silicon and memory are finite. Using a floating point representation, we can sample the real line using three bit fields:
 
@@ -59,14 +60,14 @@ N = (-1)^{S} \times \left(1 + \frac{m}{2^M}\right) \times 2^{E - \text{bias}}
 \end{equation}
 $$
 
-where $m$ is the integer value of the mantissa bits and $M$ is the number of mantissa bits. This is equivalent to writing $(-1)^S \times 1.b_1 b_2 \dots b_M \times 2^{E-\text{bias}}$, where the `1.` is the implicit leading bit and the $b_i$ are the mantissa bits.
+where $m$ is the integer value of the mantissa bits and $M$ is the number of mantissa bits. 
 
 Let's break down the formula:
 
 - The sign bit (`S`) determines if the number is positive (`S = 0`) or negative (`S = 1`).
 - The exponent (`E`) is an integer representing the power of 2, adjusted by the $\text{bias}$ term. The exponent gives us the dynamic range, meaning which slice of the real number line we are sampling.
 - The mantissa (`M`) or significand is a binary number representing the precision; if the exponent gives us the scale, the mantissa tells us which sample we are taking from that slice of the real number line.
-- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, which simplifies hardware complexity, improves performance, and reserves in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.   
+- The $\text{bias}$ is used to store the exponent in memory as an unsigned integer, which simplifies hardware complexity, improves performance, and reserves in a clean manner special values. To do so we store the exponent as $E + \text{bias}$, where $\text{bias} = 2^{e−1} − 1$ and $e$ is the number of bits we are using for the exponent. By doing so we can use the numbers with exponents with all zeros (`E = 0b0000..0`) and all ones (`E = 0b1111..1`) to represent zero and sub-normals and `NaN` and `inf` values.
 
 In normalized floating point representation, the significand always starts with an implicit leading `1` (this is why it's called "normalized"). The mantissa bits, e.g., `1001001000`, represent the fractional digits that come after this implicit `1`, forming the complete significand `1.1001001000` in binary. Each bit position corresponds to a negative power of 2: the first bit after the decimal point represents $2^{-1} = 0.5$, the second $2^{-2} = 0.25$, the third $2^{-3} = 0.125$, and so on.
 
@@ -87,6 +88,7 @@ To make these low-precision formats practical, a consortium of tech companies, i
 
 The core idea is moving from per-tensor to per-block scaling. Instead of assigning one scaling factor to an entire tensor, the tensor is divided into small blocks (e.g., 32 elements), each with its own shared 8-bit scale exponent.  
 How it works:
+
 1. **Block grouping:** Elements are grouped into blocks of $k$ elements (typically $k=32$).
 2. **Shared per-block scale:** The hardware finds the maximum absolute value in each block to determine a shared 8-bit exponent.
 3. **Local quantization:** Individual elements are quantized to 4 bits relative to their block's scale.
@@ -95,9 +97,11 @@ A simple example (real blocks use 32 elements): Consider a block of 4 values: `[
 This compartmentalization of numerical noise is the key breakthrough enabling training at 4-bit precision.
 
 ### What Is NVFP4?
+
 Building on the MX foundation, NVIDIA developed NVFP4 for their Blackwell architecture, adding hardware-specific refinements to push the limits of low-bit training.  
 
 NVFP4 is a 4-bit floating point format (`E2M1`):
+
 - Sign: 1 bit
 - Exponent: 2 bits
 - Mantissa: 1 bit (plus one implicit)
@@ -106,9 +110,9 @@ With only **16 unique values** available in a 4-bit representation, careful scal
 
 There is an important cost consideration: since every block needs its own scale factor, the scale factors themselves consume memory and arithmetic. If MX used a full FP32 scale per 32-element block, that would add 1 bit per element — making a nominally 4-bit format effectively 5 bits. The OCP MX specification addresses this by using an `E8M0` scale (8-bit, exponent-only), which limits overhead but can only represent powers of two, making the scale coarse.
 
-NVFP4 departs from MX in two key ways. First, it uses **`E4M3` scale factors** instead of `E8M0`. The 3 mantissa bits allow the scale to represent the block maximum more precisely — not just the nearest power of two but fractional values in between. Much of NVFP4's quality advantage over MXFP4 comes from this more fine-grained scale factor. Second, NVIDIA uses **16-element blocks** instead of 32. Smaller blocks confine outliers more tightly — a single spike distorts a smaller neighborhood — but they also increase scale factor overhead: 8 bits per 16 elements means 0.5 bits per element, bringing the effective storage to **4.5 bits per weight**. A per-tensor FP32 scale factor is also applied on top.
+NVFP4 departs from MX in two key ways. First, it uses `E4M3` scale factors instead of `E8M0`. The 3 mantissa bits allow the scale to represent the block maximum more precisely — not just the nearest power of two but fractional values in between. Much of NVFP4's quality advantage over MXFP4 comes from this more fine-grained scale factor. Second, NVIDIA uses **16-element blocks** instead of 32. Smaller blocks confine outliers more tightly — a single spike distorts a smaller neighborhood — but they also increase scale factor overhead: 8 bits per 16 elements means 0.5 bits per element, bringing the effective storage to **4.5 bits per weight**. A per-tensor FP32 scale factor is also applied on top.
 
-![](figures/nvfp4.png)
+
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [[3]](https://arxiv.org/abs/2509.25149))
 
 ### Algorithmic Interventions in NVFP4
@@ -121,8 +125,9 @@ Scaling is applied along both **row-wise** and **column-wise** dimensions for we
 **2. Random Hadamard Transform (RHT)**  
 One of the biggest enemies of quantization is "outlier features"—specific neurons that consistently fire with massive values. These outliers can wreck the quantization scale for their entire block.  
 The Random Hadamard Transform "smears" outlier information across the entire vector *before* quantization:
+
 - **Before RHT:** One massive value, many small ones → hard to quantize
-- **After RHT:** Many medium values → efficient quantization 
+- **After RHT:** Many medium values → efficient quantization
 
 This mathematical operation redistributes energy so that no single element dominates the scale calculation.
 
@@ -136,7 +141,7 @@ $$\mathbb{E}[\text{Round}(x)] = x$$
 $$
 \text{Round}(x) = 
 \begin{cases} 
-    \lfloor x \rfloor & \text{with probability } 1-p \\ 
+    \lfloor x \rfloor & \text{with probability } 1-p  
     \lceil x \rceil & \text{with probability } p
 \end{cases}
 $$
@@ -145,75 +150,49 @@ where $p = \frac{x - \lfloor x \rfloor}{\lceil x \rceil - \lfloor x \rfloor}$
 
 This ensures that **on average**, the expected value of the rounded number equals the original. Over many operations, rounding errors cancel out rather than accumulate in one direction, allowing gradient descent to converge correctly despite the severe quantization.
 
-![](figures/nvfp4_training.png)
+
 **Figure 4.** *Illustration of the compute flow for an NVFP4 quantized linear layer. All GEMM operations quantize their inputs to NVFP4. Source [[3]](https://arxiv.org/abs/2509.25149).*
 
 
-<!--
-Now that we've described the amalgamation of mathematical tricks and floating points, we need to understand how these bits are supposed to move on the prescribed architecture. NVFP4 was introduced for the B100, B200 and B300 chips. 
-
-History of NVDA GPU Architecture
-* TensorCores 
-* Shared Memory (SMEM) / Global Memory (GMEM)
-* L1/L2 Cache
-* DSM
-* Tensor memoery through archictecute -> increase in bandwidth and inflith efficiency
-```quote
-"What I cannot create, I do not understand" Richard Feynman
-```
--->
 
 # GPU Architecture
+
 A prerequisite for writing performant GPU kernels is to understand the hardware architecture inside the GPU and how data flows through it. A GPU is optimized for exactly two operations: arithmetic operations on data, and the movement/storage of that data between hierarchical memory pools. The efficiency of the former is bounded by transistor physics; the efficiency of the latter is bounded by the speed of light and wire capacitance. 
 
 > [!NOTE]
 > The following information is based on the Blackwell architecture of the B200 GPU, and all further mentions of 'GPU' refer to the B200. 
 > When we speak about matrix multiplication, the operation we refer to has the form: 
-`D = A * B` or `D = A * B + C`
-
-
-
+> `D = A * B` or `D = A * B + C`
 
 # Movement of Data: Physical Hierarchy
+
 The memory architecture of modern GPUs is a spatially organized response to the inverse relationship between latency and density in CMOS design. If they could, NVIDIA would place every compute unit adjacent to register-speed memory. Instead, contemporary GPUs pack $10^4-10^5$ threads across 148 Streaming Multiprocessors (SMs) on 2 distinct dies, connected by a 10TB/s NV-HBI interconnect. The GPU places the fastest and smallest memory closest to compute hardware, and iteratively hosts larger but slower memory further away, maximizing aggregate throughput by minimizing latency.
 
 The memory hierarchy in GPUs is organised as follows:
 
-1) **Register File (RMEM)**: The fastest storage, placed adjacent to SMs. Each SM has 256KB of register files, summing to ~37.75MB across the entire GPU. Since each SM has the ability to host up to 64 warps (i.e., 2,048 threads), each thread has 128 bytes of register storage when the GPU is fully populated.
-
-2) **Tensor Memory (TMEM)**: An update introduced to the Blackwell architecture, containing 256KB per SM of dedicated SRAM accessible by Tensor Cores (more on these later). These play an important role in GEMM, so visualizing them is crucial. They are 2D matrices, 512 columns and 128 rows, or lanes, of 32-bit cells. TMEM functions as a loading dock for matrix multiply accumulate (MMA) tiles. Their introduction abstracts away from hardware cache prediction and gives the ability to manually control access patterns of tensor tiles. TMEM allows matrix `A` to be located in TMEM or SMEM, matrix `B` must be in SMEM, and the accumulator must be in TMEM.
+1. **Register File (RMEM)**: The fastest storage, placed adjacent to SMs. Each SM has 256KB of register files, summing to ~37.75MB across the entire GPU. Since each SM has the ability to host up to 64 warps (i.e., 2,048 threads), each thread has 128 bytes of register storage when the GPU is fully populated.
+2. **Tensor Memory (TMEM)**: An update introduced to the Blackwell architecture, containing 256KB per SM of dedicated SRAM accessible by Tensor Cores (more on these later). These play an important role in GEMM, so visualizing them is crucial. They are 2D matrices, 512 columns and 128 rows, or lanes, of 32-bit cells. TMEM functions as a loading dock for matrix multiply accumulate (MMA) tiles. Their introduction abstracts away from hardware cache prediction and gives the ability to manually control access patterns of tensor tiles. TMEM allows matrix `A` to be located in TMEM or SMEM, matrix `B` must be in SMEM, and the accumulator must be in TMEM.
 ![](figures/tensor-memory-layout.png)
 **Figure 5.** *Tensor Memory (TMEM) layout: 512 columns × 128 rows of 32-bit cells per SM, serving as a loading dock for MMA tiles.* (Source [[4]](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tensor-memory-addressing))
-
-3) **Shared Memory (SMEM)** and **L1 Cache**: Unified 256KB SRAM structure per SM. Percentages of how much data each structure has can be manually controlled.
-
-4) **L2 Cache:** 192MB SRAM that is physically split across the dual-die boundary; each die maintains partitions local to its 74 SMs, with coherency traffic traversing the NV-HBI interconnect. 
-
-5) **Tensor Memory Accelerator (TMA)**: Introduced in Hopper to offload address-generation from the register file via descriptor-based async copy; refined in Blackwell with second-generation sub-byte quantization (FP4/FP6 unpacking) and CTA-pair semantics. This change in Blackwell architecture facilitates thread blocks sharing distributed SMEM and executing cooperative MMA across paired SMs.
-
-6) **VRAM (GMEM):** The largest but most distant and slowest memory tier in the hierarchy. For B200, it consists of 192GB of HBM3e stacked on the same substrate as the GPU dies. The GPU implements 8 memory stacks (4 per die), delivering an aggregate bandwidth of 8 TB/s.
+3. **Shared Memory (SMEM)** and **L1 Cache**: Unified 256KB SRAM structure per SM. Percentages of how much data each structure has can be manually controlled.
+4. **L2 Cache:** 192MB SRAM that is physically split across the dual-die boundary; each die maintains partitions local to its 74 SMs, with coherency traffic traversing the NV-HBI interconnect. 
+5. **Tensor Memory Accelerator (TMA)**: Introduced in Hopper to offload address-generation from the register file via descriptor-based async copy; refined in Blackwell with second-generation sub-byte quantization (FP4/FP6 unpacking) and CTA-pair semantics. This change in Blackwell architecture facilitates thread blocks sharing distributed SMEM and executing cooperative MMA across paired SMs.
+6. **VRAM (GMEM):** The largest but most distant and slowest memory tier in the hierarchy. For B200, it consists of 192GB of HBM3e stacked on the same substrate as the GPU dies. The GPU implements 8 memory stacks (4 per die), delivering an aggregate bandwidth of 8 TB/s.
 
 # Computation of Data: Visualizing the bits flow
+
 Excluding L2 and GMEM, the rest of the memory we describe above is placed inside the SM, which also houses the specialized compute units and optimized datapaths that allow for high-throughput matrix operations.
 
-1) **Tensor Cores**: Tensor Cores are the fundamental parts of the GPU that facilitate MMA instructions on small tiles. NVIDIA introduced these hardware cores in 2017 to rival Google's 2016 release of their systolic array TPUs. 
+1. **Tensor Cores**: Tensor Cores are the fundamental parts of the GPU that facilitate MMA instructions on small tiles. NVIDIA introduced these hardware cores in 2017 to rival Google's 2016 release of their systolic array TPUs. 
 The earliest Tensor Core, introduced in Volta architecture, was only able to handle FP16 data types and operate on matrices with size of 4x4x4. Moreover, it was not sparse and received data slowly from SMEM and register files. 
 Four generations later, each iteration increased the computation-to-memory ratio and added support for smaller precision types. The 5th generation of Tensor Cores in Blackwell can handle low-precision FP4, use CTA pairs on a single SM, and include TMEM to reduce pressure on SMEM.
+2. **Warp Schedulers**: A warp consists of 32 threads, and the scheduler issues instructions to all 32 per clock cycle.
+3. **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LD/ST unit stays idle.
 
-2) **Warp Schedulers**: A warp consists of 32 threads, and the scheduler issues instructions to all 32 per clock cycle.
 
-3) **LD/ST Units**: Load/Store instructions that are responsible for moving the data. All active threads in a warp always issue the same type of instruction in the same clock cycle. If that instruction is a load or store, it gets issued to the LD/ST units. If a thread is inactive (due to looping or conditional execution), the corresponding LD/ST unit stays idle. 
-
-<img src="figures/sm_breakdown.webp" width="600">
 
 **Figure 6.** *Breakdown of the Streaming Multiprocessor (SM) in the Blackwell architecture* (Source [[5]](https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/))
 
-<!--![](figures/thread_block_cluster.webp)
-**Figure 1. Thread blocks** Source [[5]](https://developer.nvidia.com/blog/inside-nvidia-blackwell-ultra-the-chip-powering-the-ai-factory-era/).
-
-blackwell tensorcores [7]
-
-tensorcore architecture and big O notation [8]-->
 
 
 ## Conclusion
@@ -224,7 +203,8 @@ In Part 2 of this mini-series, we'll show how to write a GEMM kernel for B200 us
 
 ## Links
 
-<!-- 0. https://openrouter.ai/state-of-ai Is this still relevant? -->
+
+
 1. [Wikipedia article on Huang's Law](https://en.wikipedia.org/wiki/Huang's_law)
 2. [OCP Microscaling Formats](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf)
 3. ["Pretraining Large Language Models with NVFP4"](https://arxiv.org/abs/2509.25149), NVIDIA Research
@@ -233,3 +213,4 @@ In Part 2 of this mini-series, we'll show how to write a GEMM kernel for B200 us
 6. [Cutlass Tutorial: GEMM with Thread Block Clusters on NVIDIA Blackwell GPUs](https://research.colfax-intl.com/cutlass-tutorial-gemm-with-thread-block-clusters-on-nvidia-blackwell-gpus/)
 7. [Blackwell TensorCore Architecture (WeChat, Chinese)](https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247493056&idx=1&sn=1c6025f97df16a3b9576746b7944538e&chksm=f995f502cee27c145677e91761ebec0d59cde82d4562c463070f2c72efb3751567bac934c266&scene=178&cur_album_id=2538479717163761664&search_click_id=#rd)
 8. [TensorCore Architecture and Big O Notation (WeChat, Chinese)](https://mp.weixin.qq.com/s?__biz=MzUxNzQ5MTExNw==&mid=2247491424&idx=1&sn=0fc2110931b27714900e78d73b11a5b5&scene=21&poc_token=HOHnjWmj8OCvlO9eiSxuNJMDxVEsmgh7A4q_qNIq)
+
