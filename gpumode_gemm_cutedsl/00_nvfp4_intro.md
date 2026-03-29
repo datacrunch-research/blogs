@@ -116,6 +116,7 @@ NVFP4 departs from MX in two key ways. First, it uses `E4M3` scale factors inste
 
 
 ![](figures/nvfp4.png)
+
 **Figure 3.** *A 16×32 matrix stored in NVFP4 format. Each block contains 16 contiguous FP4 elements (gray and green) with a shared FP8 scale factor (yellow). The largest magnitude element in each block (green) is scaled to the FP4 maximum representable value. A per tensor FP32 scale factor is also applied (not shown).* (Source [[3]](https://arxiv.org/abs/2509.25149))
 
 ### Algorithmic Interventions in NVFP4
