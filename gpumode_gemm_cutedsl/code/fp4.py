@@ -90,14 +90,16 @@ def quant_nvfp4_torch(x: torch.Tensor, global_scale: torch.Tensor = None):
 
 if __name__ == "__main__":
     shape = (512, 128)
-    x = torch.randn(shape, dtype=torch.bfloat16) * 0.01
+    x = torch.randn(shape, dtype=torch.bfloat16) * 0.01   # ML-scale activations
 
     xq, xs, global_scale = quant_nvfp4_torch(x)
-    print(">> Quantized tensor:")
-    print(xq)
-    print(xq.shape)
-    print(">> Blockwise scales")
-    print(xs)
-    print(xs.shape)
-    print(">> Global scale:")
-    print(global_scale)
+
+    print(f">> Quantized tensor:  shape={tuple(xq.shape)}, dtype={xq.dtype}")
+    print(f"   row 0, bytes [0:8] = {xq[0, :8].view(torch.uint8).tolist()}")
+    print(f"   each byte packs 2 FP4 values; E2M1 alphabet = {{0, +/-0.5, 1, 1.5, 2, 3, 4, 6}}")
+
+    print(f">> Blockwise scales:  shape={tuple(xs.shape)}, dtype={xs.dtype}")
+    print(f"   row 0 = {xs[0].tolist()}")
+    print(f"   one FP8 e4m3 scale per 16-element block -> 128/16 = 8 per row")
+
+    print(f">> Global scale:      {global_scale.item():.2f}  (fp32, = FP4_MAX * FP8_MAX / amax(x))")
