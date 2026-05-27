@@ -57,9 +57,9 @@ Three overhead profiles emerge:
 
 1. **Intra-GPU memory (D2D): no overhead.** Data stays within the GPU's encrypted VRAM boundary: no trust boundary crossing, no encryption pipeline latency.
 
-2. **CPU <-> GPU DMA (H2D/D2H): -63 to -66%.** Every transfer crosses the trust boundary between SEV-SNP encrypted host memory and CC-encrypted GPU VRAM.
+2. **CPU ↔ GPU DMA (H2D/D2H): -63 to -66%.** Every transfer crosses the trust boundary between SEV-SNP encrypted host memory and CC-encrypted GPU VRAM.
 
-3. **GPU <-> GPU NVLink (P2P): -15%.** NVLE encrypts all NVLink traffic between GPUs. The overhead is significantly lower than H2D, which favors architectures where data resides entirely on GPU memory and inter-GPU communication stays on the NVLink fabric without touching the host.
+3. **GPU ↔ GPU NVLink (P2P): -15%.** NVLE encrypts all NVLink traffic between GPUs. The overhead is significantly lower than H2D, which favors architectures where data resides entirely on GPU memory and inter-GPU communication stays on the NVLink fabric without touching the host.
 
 ## End-to-End Inference: Qwen3.5-397B FP8
 
@@ -98,13 +98,13 @@ To measure how hardware-level overhead translates to real inference performance,
 
 **Decode latency (TPOT) overhead scales with concurrency.** At low concurrency (CONC=4), TPOT overhead is +14-17% — consistent with the -15% P2P NVLink bandwidth reduction from microbenchmarks. At high concurrency (CONC=128), TPOT overhead reaches +56-87%. This is not a fixed per-token cost: it compounds under load as concurrent requests generate more allreduce operations competing for the encrypted NVLink fabric.
 
-**Prefill latency (TTFT) overhead is context-length dependent.** At ISL=1024, TTFT overhead is 37-62% across concurrency levels. At ISL=8192, it drops to 2-16%. Longer prefill sequences mean compute dominates the TTFT measurement, making the fixed CC overhead (including the lost allreduce fusion) a smaller fraction. This strongly suggests the TTFT overhead at short context is dominated by the lost software optimization, not encryption latency.
+**Prefill latency (TTFT) overhead is context-length dependent.** At ISL=1024, TTFT overhead is 37-62% across concurrency levels. At ISL=8192, it drops to 2-16%. Longer prefill sequences mean compute dominates the TTFT measurement, making the fixed CC overhead (including the lost allreduce fusion) a smaller fraction. This strongly suggests that the TTFT overhead at short context is dominated by lost software optimization, not by encryption latency.
 
 **Throughput loss reaches 35-46% at high concurrency.** The CC VM saturates earlier than the baseline. At CONC=256 with 8k context, throughput loss is -31%, less severe than the -43% at 1k context, consistent with longer computation amortizing communication overhead.
 
 ## Isolating Pure CC Overhead: DeepSeek-V4-Pro FP4
 
-The Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-mem` optimization. To isolate the pure hardware CC cost, we benchmark DeepSeek-V4-Pro (~680B MoE, FP4) using SGLang's custom B300-tuned image. Critically, the DSV4 non-DP code path runs with `enable_symm_mem=False` and `enable_flashinfer_allreduce_fusion=False` on **both** baseline and CC thus no software optimization difference.
+Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-mem` optimization. To isolate the pure hardware CC cost, we benchmark DeepSeek-V4-Pro (~680B MoE, FP4) using SGLang's custom B300-tuned image. Critically, the DSV4 non-DP code path runs with `enable_symm_mem=False` and `enable_flashinfer_allreduce_fusion=False` on **both** baseline and CC, thus no software optimization difference.
 
 - **Configuration:** FP4, SGLang (`lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15`), non-DP attention, no MTP
 - **Baseline:** [InferenceX](https://github.com/SemiAnalysisAI/InferenceX) published B300 results (non-CC)
@@ -119,11 +119,11 @@ The Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-
 
 ## Conclusion
 
-1. **Compute is free, communication is not.** CC adds zero overhead to GPU compute (matmul, attention, MoE routing). The cost is entirely at data movement boundaries: -63-66% on CPU↔GPU DMA, -15% on GPU↔GPU NVLink. Intra-GPU memory is unaffected.
+1. **Degradation only on communication, not computation.** CC adds zero overhead to GPU compute (matmul, attention, MoE routing). The cost is entirely at data movement boundaries: -63-66% on CPU↔GPU DMA, -15% on GPU↔GPU NVLink. Intra-GPU memory is unaffected.
 
 2. **Pure CC encryption overhead on decode is ~12-15%.** Measured on DeepSeek-V4-Pro where both baseline and CC run without FlashInfer allreduce fusion. This scales to ~25% under load as allreduce operations contend for the encrypted NVLink fabric.
 
-3. **The bigger cost is software, not hardware.** CC disables CUDA multicast, which breaks FlashInfer allreduce fusion in SGLang. This lost optimization is the dominant source of overhead in tensor-parallel inference, particularly on prefill (TTFT) at short context lengths.
+3. **CC limitations over software optimizations.** CC disables CUDA multicast, which breaks FlashInfer allreduce fusion in SGLang. This lost optimization is the dominant source of overhead in tensor-parallel inference, particularly on prefill (TTFT) at short context lengths.
 
 4. **Overhead scales with concurrency and shrinks with context length.** TPOT overhead ranges from +14% (CONC=4) to +87% (CONC=128) on Qwen3.5. Longer input sequences (8k vs 1k) amortize the fixed CC costs, reducing TTFT overhead from 44-62% down to 2-16%.
 
