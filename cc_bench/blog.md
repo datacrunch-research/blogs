@@ -133,7 +133,7 @@ To measure how hardware-level overhead translates to real inference performance,
 
 ## Isolating Pure CC Overhead: DeepSeek-V4-Pro FP4
 
-Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-mem` optimization. To isolate the pure hardware CC cost, we benchmark DeepSeek-V4-Pro (~680B MoE, FP4) using SGLang's custom B300-tuned image. Critically, the DSV4 non-DP code path runs with `enable_symm_mem=False` and `enable_flashinfer_allreduce_fusion=False` on **both** baseline and CC, thus no software optimization difference.
+Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-mem` optimization. To isolate the pure hardware CC cost, we benchmark DeepSeek-V4-Pro (~1.6T MoE, FP4) using SGLang's custom B300-tuned image. Critically, the DSV4 non-DP code path runs with `enable_symm_mem=False` and `enable_flashinfer_allreduce_fusion=False` on **both** baseline and CC, thus no software optimization difference.
 
 - **Configuration:** FP4, SGLang (`lmsysorg/sglang:deepseek-v4-b300@sha256:2fec8d7958bb0d53b50d7bf04d6ae6a7de8a35503775826e0550a45dd8c3ee15`), non-DP attention, no MTP
 - **Baseline:** [InferenceX](https://github.com/SemiAnalysisAI/InferenceX) published B300 results (non-CC)
