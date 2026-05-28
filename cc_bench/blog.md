@@ -6,7 +6,7 @@ Confidential Computing (CC) enables computation on encrypted data without exposi
 
 The security guarantees come at a cost. CC adds encryption at multiple system boundaries: CPU memory (AMD SEV-SNP), GPU VRAM (NVIDIA Confidential Computing), and GPU-to-GPU links (NVLink Encryption / NVLE). This blog quantifies that cost on NVIDIA B300 SXM6 GPUs across microbenchmarks and end-to-end LLM inference workloads.
 
-We find that the hardware encryption overhead is moderate: ~12-15% on decode latency, with compute throughput unaffected. However, CC disables CUDA multicast, which breaks FlashInfer allreduce fusion and other collective communication optimizations in modern inference frameworks. This software optimization gap, rather than encryption itself, is the dominant source of overhead in tensor-parallel inference.
+We find that the hardware encryption overhead is moderate: ~12-15% on decode latency, with compute throughput unaffected. However, CC disables CUDA multicast (see *Why CC Disables CUDA Multicast* below for the architectural reason), which breaks FlashInfer allreduce fusion and other collective communication optimizations in modern inference frameworks. This software optimization gap, rather than encryption itself, is the dominant source of overhead in tensor-parallel inference.
 
 ## CC Stack Under Test
 
@@ -61,6 +61,35 @@ Three overhead profiles emerge:
 
 3. **GPU ↔ GPU NVLink (P2P): -15%.** NVLE encrypts all NVLink traffic between GPUs. The overhead is significantly lower than H2D, which favors architectures where data resides entirely on GPU memory and inter-GPU communication stays on the NVLink fabric without touching the host.
 
+## Why CC Disables CUDA Multicast
+
+Before moving to end-to-end inference, it is worth understanding *why* CC removes one of the most important communication optimizations available on modern NVIDIA hardware — and why this is an architectural constraint rather than a configuration choice.
+
+By architecture, NVIDIA SHARP operations — including CUDA multicast and the `cuMulticast*` driver API family — are not compatible with CC. SHARP relies on the **NVSwitch performing in-fabric reductions** (sum, min, max, broadcast) on data as it traverses the switch. This fundamentally requires the switch to read operand values in plaintext.
+
+Under CC, all NVLink traffic between GPUs is end-to-end AES-GCM encrypted with session keys exchanged via SPDM that never leave the GPU TEEs. The NVSwitch sits outside the trust boundary and has no way to decrypt, operate on, and re-encrypt the data. The two designs are mutually exclusive at the hardware level:
+
+- **CC's guarantee:** no plaintext outside the GPU.
+- **SHARP's requirement:** the switch must see plaintext to do its job.
+
+NVIDIA resolves this by disabling multicast in CC modes. We can verify this empirically:
+
+```python
+python3 -c '
+import ctypes
+cuda = ctypes.cdll.LoadLibrary("libcuda.so")
+cuda.cuInit(0)
+val = ctypes.c_int(0)
+cuda.cuDeviceGetAttribute(ctypes.byref(val), 132, 0)  # CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED
+print(f"MULTICAST_SUPPORTED = {val.value}")
+'
+# Returns 1 on non-CC B300, 0 on CC B300
+```
+
+This single feature gap cascades upward through the stack. **NVLink SHARP (NVLS)** — the in-fabric reduction path NCCL uses for fast all-reduces — is unavailable. **NVIDIA Symmetric Memory** (PyTorch's `torch.distributed._symmetric_memory`, SGLang's `--enable-symm-mem`, vLLM's equivalent) is built on multicast and falls back or crashes. **FlashInfer's fused allreduce** path, which overlaps allreduce communication with compute via multicast, cannot be used. Collectives still function — they fall back to point-to-point encrypted ring/tree algorithms over the encrypted NVLink — but they pay the full bandwidth cost without the in-fabric acceleration that modern inference frameworks rely on.
+
+This is the dominant source of overhead in tensor-parallel inference under CC, and it is the reason we measure both pure encryption overhead (DeepSeek-V4-Pro, where neither side uses these optimizations) and combined overhead (Qwen3.5, where the baseline does).
+
 ## End-to-End Inference: Qwen3.5-397B FP8
 
 To measure how hardware-level overhead translates to real inference performance, we benchmark Qwen3.5-397B-A17B (FP8) using the InferenceX benchmarking framework with SGLang v0.5.10.post1.
@@ -68,7 +97,7 @@ To measure how hardware-level overhead translates to real inference performance,
 - **Configuration:** TP=4, EP=1, SGLang, no speculative decoding. 
 - **Baseline:** [InferenceX](https://github.com/SemiAnalysisAI/InferenceX/blob/8862360995f32b9ca1752b57f7cb1b774c69ee3b/benchmarks/single_node/qwen3.5_fp8_b300.sh) published B300 results (non-CC, 2026-04-17).
 
-**Modification required for CC:** The `--enable-symm-mem` flag in the InferenceX benchmark script must be removed. This flag enables CUDA symmetric memory, which depends on multicast, a capability CC disables at the driver level. The baseline was run with this optimization enabled, so the measured delta includes both CC encryption overhead and the lost optimization, which overlaps allreduce communication with compute.
+**Modification required for CC:** The `--enable-symm-mem` flag in the InferenceX benchmark script must be removed. This flag enables CUDA symmetric memory, which is built on CUDA multicast — disabled by CC for the architectural reason described in *Why CC Disables CUDA Multicast*. The baseline was run with this optimization enabled, so the measured delta includes both CC encryption overhead and the lost optimization, which overlaps allreduce communication with compute.
 
 ### ISL=1024, OSL=1024 (Short Context)
 
@@ -123,7 +152,7 @@ Qwen3.5 results combine CC encryption overhead with the lost `--enable-symm-mem`
 
 2. **Pure CC encryption overhead on decode is ~12-15%.** Measured on DeepSeek-V4-Pro where both baseline and CC run without FlashInfer allreduce fusion. This scales to ~25% under load as allreduce operations contend for the encrypted NVLink fabric.
 
-3. **CC limitations over software optimizations.** CC disables CUDA multicast, which breaks FlashInfer allreduce fusion in SGLang. This lost optimization is the dominant source of overhead in tensor-parallel inference, particularly on prefill (TTFT) at short context lengths.
+3. **CC architectural limit on software optimizations.** Because the NVSwitch cannot operate on encrypted traffic, CC disables CUDA multicast and the NVIDIA SHARP fast path. This breaks FlashInfer allreduce fusion in SGLang and is the dominant source of overhead in tensor-parallel inference, particularly on prefill (TTFT) at short context lengths.
 
 4. **Overhead scales with concurrency and shrinks with context length.** TPOT overhead ranges from +14% (CONC=4) to +87% (CONC=128) on Qwen3.5. Longer input sequences (8k vs 1k) amortize the fixed CC costs, reducing TTFT overhead from 44-62% down to 2-16%.
 
