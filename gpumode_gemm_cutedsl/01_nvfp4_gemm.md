@@ -1,12 +1,12 @@
 ### Writing in CuTeDSL
 
-Part 2 starts from naive GEMM and builds toward an optimized NVFP4 kernel in CuTeDSL. The goal is to explain the full path from simple matrix multiplication to the persistent B200 pipeline used in the submission.
+This post walks through building an NVFP4 GEMM kernel for B200 in CuTeDSL, NVIDIA's Python frontend for CUTLASS. It starts from a textbook matrix multiply and adds one layer at a time: tiling for data reuse, swizzling for bank-conflict-free SMEM access, NVFP4 quantization for bandwidth compression, and the persistent warp-specialized pipeline that ties it all together. Each section shows the problem first, then the code that solves it.
 
-Naive MatMul
-Tiled MatMul
-Swizzling
-NVFP4 and scale factors
-Code samples from my submission
+1. Naive GEMM
+2. Tiled GEMM, shared memory and data reuse
+3. Swizzling
+4. NVFP4 and scale factors
+5. B200 2-CTA persistent GEMM pipeline
 
 ### Naive GEMM
 
@@ -28,40 +28,46 @@ This is slow and far from optimal, as you only have 1 thread working across the 
 ![](figures/naive_gemm.png)
 
 ### Tiled GEMM
-B200 has 148 SMs, and each SM has 2,048 threads. To use that parallelism, we tile the problem. Each block works on smaller chunks of A and B and accumulates across K.
+B200 has 148 SMs that can run many thread blocks in parallel, but the naive kernel has a deeper problem than single-thread serialization: every multiply-accumulate goes back to DRAM for both operands. Count the bytes — two FP32 loads (8 bytes) per FMA (2 FLOPs) is 0.25 FLOP/byte. Tensor cores want hundreds of FLOPs per byte of DRAM bandwidth, so the naive kernel is memory-bound by orders of magnitude before it ever reaches the compute units.
+
+Tiling is the fix. A block moves a small slice of A and a small slice of B into fast on-chip **shared memory** (SMEM) once, then every thread in the block reuses those slices for many multiply-accumulates before going back to DRAM for the next slice. The K dimension is walked in chunks, streaming new tile pairs through SMEM while each thread accumulates partial sums in registers.
 
 ```python
 @cute.kernel
-def tiled_gemm_kernel(A, B, C, M, N, K, tile_size):
-    """Tiled GEMM kernel: C = A @ B (with K-tiling)"""
-    # Get block indices
+def tiled_gemm_kernel(A, B, C, M, N, K, T):
+    """Tiled GEMM with shared-memory reuse.
+    Each block owns one T x T tile of C. For each T-wide chunk of K,
+    the block cooperatively loads T x T tiles of A and B into SMEM,
+    then every thread performs T multiply-accumulates against SMEM operands."""
     block_m, block_n, _ = cute.arch.block_idx()
+    tx, ty, _ = cute.arch.thread_idx()  # thread owns C[block_m*T + tx, block_n*T + ty]
 
-    # Calculate tile starting positions
-    m_start = block_m * tile_size
-    n_start = block_n * tile_size
+    m = block_m * T + tx
+    n = block_n * T + ty
 
-    # Each thread block computes one tile_size x tile_size output tile
-    for m_local in range(tile_size):
-        for n_local in range(tile_size):
-            m = m_start + m_local
-            n = n_start + n_local
+    # On-chip scratchpads: one tile of A and one tile of B
+    smem_A = cute.make_shared_tensor(A.dtype, (T, T))
+    smem_B = cute.make_shared_tensor(B.dtype, (T, T))
 
-            if m < M and n < N:
-                acc = 0.0
+    acc = 0.0
+    for k_tile in range(0, K, T):
+        # Cooperative load: each thread brings in one element of each tile
+        smem_A[tx, ty] = A[m, k_tile + ty]
+        smem_B[tx, ty] = B[k_tile + tx, n]
+        cute.arch.sync_threads()
 
-                # Tile along K: load tile_size chunks at a time
-                for k_tile in range(0, K, tile_size):
-                    for k_local in range(tile_size):
-                        k = k_tile + k_local
-                        if k < K:
-                            acc += A[m, k] * B[k, n]
+        # All T^2 FMAs for this K-chunk source their operands from SMEM, not DRAM
+        for k in range(T):
+            acc += smem_A[tx, k] * smem_B[k, ty]
+        cute.arch.sync_threads()
 
-                C[m, n] = acc
+    C[m, n] = acc
 ```
-This kernel moves away from element granularity to tile granularity. Tiling helps because it reuses loaded data across more arithmetic and maps naturally onto tensor core tile shapes.
-![](figures/tiled_gemm.png)
-I still need to update this drawing so it reflects K tiling correctly.
+
+Two things changed. Threads in a block now cooperate on one output tile instead of fighting independently for the DRAM bus, and operands live in SMEM between the load and the FMA. Count the reuse: each element of A lands in SMEM once per k_tile and is read by T threads (every thread in its M-row); each element of B is read by T threads (every thread in its N-column). The reuse factor is T. Arithmetic intensity scales linearly with T — for T = 32 in FP32, it rises from 0.25 to 8 FLOP/byte, a 32× jump. Real kernels push T much larger by having each thread compute a register-resident sub-tile of outputs rather than a single element, which is where tensor-core-shaped tiles start to matter.
+
+
+This step also sets up what follows. The inner loop issues a stream of SMEM reads — every thread reads `smem_A[tx, k]` and `smem_B[k, ty]` for every `k` — and whether those reads run at full SMEM bandwidth or serialize into bank conflicts depends on how the tile is laid out across SMEM's banks. That is what swizzling controls.
 
 
 ### Swizzling
@@ -82,7 +88,7 @@ With swizzling enabled, those same column elements are redistributed across bank
 This is especially important for transpose-like behavior inside GEMM pipelines, where one stage may read row-major while a later stage needs column-major fragments. Without swizzling, the write or read side of that transpose path becomes a bank-conflict hotspot.
 
 One practical note for Blackwell workflows:
-> TMA can handle unswizzling when data is moved back from SMEM to GMEM, so the global layout can remain canonical while local SMEM uses a conflict-friendly permutation.
+> TMA (Tensor Memory Accelerator, a hardware unit that handles bulk copies between GMEM and SMEM) can handle unswizzling when data is moved back from SMEM to GMEM, so the global layout can remain canonical while local SMEM uses a conflict-friendly permutation.
 
 At implementation level, the swizzle mapping is based on XOR over selected address bits. The high-level logic:
 1. Pick a group of control bits from the address.
@@ -218,78 +224,50 @@ def quant_nvfp4_torch(x: torch.Tensor, global_scale: torch.Tensor = None):
 
 if __name__ == "__main__":
     shape = (512, 128)
-    x = torch.randn(shape, dtype=torch.bfloat16) * 0.01
+    x = torch.randn(shape, dtype=torch.bfloat16) * 0.01   # ML-scale activations
 
     xq, xs, global_scale = quant_nvfp4_torch(x)
-    print("Quantized tensor:")
-    print(xq)
-    print(xq.shape)
-    print()
-    print("Blockwise scales")
-    print(xs)
-    print(xs.shape)
-    print()
-    print("Global scale:")
-    print(global_scale)
 
+    print(f">> Quantized tensor:  shape={tuple(xq.shape)}, dtype={xq.dtype}")
+    print(f"   row 0, bytes [0:8] = {xq[0, :8].view(torch.uint8).tolist()}")
+    print(f"   each byte packs 2 FP4 values; E2M1 alphabet = {{0, +/-0.5, 1, 1.5, 2, 3, 4, 6}}")
+
+    print(f">> Blockwise scales:  shape={tuple(xs.shape)}, dtype={xs.dtype}")
+    print(f"   row 0 = {xs[0].tolist()}")
+    print(f"   one FP8 e4m3 scale per 16-element block -> 128/16 = 8 per row")
+
+    print(f">> Global scale:      {global_scale.item():.2f}  (fp32, = FP4_MAX * FP8_MAX / amax(x))")
 ```
 Reference code [2].
 
 ```terminal
-uv run code/fp4.py
-Initial tensor:
-tensor([[ 0.0043, -0.0062,  0.0153,  ..., -0.0045,  0.0071, -0.0053],
-        [ 0.0051,  0.0090, -0.0092,  ..., -0.0087, -0.0015, -0.0004],
-        [ 0.0084,  0.0217, -0.0216,  ...,  0.0172, -0.0109,  0.0057],
-        ...,
-        [-0.0112, -0.0050,  0.0085,  ..., -0.0051, -0.0168,  0.0109],
-        [ 0.0066,  0.0096,  0.0048,  ..., -0.0004, -0.0139, -0.0042],
-        [-0.0013,  0.0033, -0.0133,  ..., -0.0109,  0.0142,  0.0240]],
-       dtype=torch.bfloat16)
-torch.Size([512, 128])
-Quantized tensor:
-tensor([[178.,  38., 128.,  ..., 206., 193., 197.],
-        [ 83.,  13., 149.,  ..., 227., 210., 137.],
-        [116., 111., 226.,  ..., 218., 123.,  78.],
-        ...,
-        [190., 245., 183.,  ...,  97., 195., 111.],
-        [118.,  21., 126.,  ..., 189., 138., 190.],
-        [ 41.,  45.,  20.,  ..., 226., 221., 118.]],
-       dtype=torch.float4_e2m1fn_x2)
-torch.Size([512, 64])
-
-Blockwise scales
-tensor([[288., 240., 192.,  ..., 320., 448., 176.],
-        [256., 320., 240.,  ..., 288., 288., 240.],
-        [288., 448., 288.,  ..., 256., 448., 240.],
-        ...,
-        [240., 160., 288.,  ..., 144., 240., 224.],
-        [128., 256., 320.,  ..., 288., 240., 240.],
-        [320., 240., 288.,  ..., 256., 288., 320.]], dtype=torch.float8_e4m3fn)
-torch.Size([512, 8])
-
-Global scale:
-tensor(80956.2344)
-
+$ uv run code/fp4.py
+>> Quantized tensor:  shape=(512, 64), dtype=torch.float4_e2m1fn_x2
+   row 0, bytes [0:8] = [108, 229, 121, 94, 85, 217, 160, 193]
+   each byte packs 2 FP4 values; E2M1 alphabet = {0, +/-0.5, 1, 1.5, 2, 3, 4, 6}
+>> Blockwise scales:  shape=(512, 8), dtype=torch.float8_e4m3fn
+   row 0 = [224.0, 208.0, 224.0, 240.0, 288.0, 416.0, 416.0, 256.0]
+   one FP8 e4m3 scale per 16-element block -> 128/16 = 8 per row
+>> Global scale:      80956.23  (fp32, = FP4_MAX * FP8_MAX / amax(x))
 ```
 
-Notice the quantized tensor shape shrinks in the last dimension because values are packed (`2x FP4` per byte-like storage lane). Furthermore, blockwise scale tensor has `N/16` granularity, which matches the 16-element microscaling contract. Global scale is a single calibration factor that keeps block scales in a representable FP8 range.
+The numbers line up with the calibration. `global_scale = 6 x 448 / amax(x)` is defined so the largest per-block scale lands near FP8 e4m3's max of 448 — using the fp8 range fully. Drop either tier and the contract breaks: one FP8 scale can't span the ~10^5 here, and one FP32 scale would force every block to share one calibration and lose local fidelity.
 
 With the quantization contract in place, we can now read the full kernel pipeline.
 ![](figures/2cta.png)
-Figure: Sketch of B200 persistent GEMM kernel with 2 CTA. Source [3].
+Figure: Sketch of B200 persistent GEMM kernel with 2 CTAs. Source [3].
 
 ### B200 2-CTA persistent GEMM pipeline
 
-The diagram above shows a persistent kernel organized as a three-part pipeline that runs continuously across K tiles. One group of warps does data movement, one group does matrix multiply-accumulate work, and one group runs epilogue and stores. The objective is overlap. While one tile is being computed, the next tile is loaded and the previous tile is written back.
+The diagram above shows a persistent kernel, one where CTAs (cooperative thread arrays, CUDA's name for thread blocks) stay resident and pull new tiles instead of relaunching, organized as a three-part pipeline that runs continuously across K tiles. One group of warps handles data movement, one group runs matrix multiply-accumulate (MMA) work, and one group runs epilogue stores. The objective is overlap: while one tile is being computed, the next is loaded and the previous is written back.
 
-The memory path is GMEM to L2 to SMEM to TMEM to Tensor Core execution, then back through TMEM and registers or SMEM to GMEM for final writeback. This path is especially important for NVFP4 because each tile carries both payload values and scale metadata. If either stream arrives late, tensor cores stall.
+The memory path is GMEM (global memory) → L2 → SMEM → TMEM (tensor memory, a Blackwell per-SM scratchpad for tensor core operands) → Tensor Core execution, then back through TMEM and registers or SMEM → GMEM for writeback. This path is especially important for NVFP4 because each tile carries both payload values and scale metadata. If either stream arrives late, tensor cores stall.
 
 #### Block-Scaled FP4
 
 Standard GEMM is C = A @ B. Block-scaled FP4 adds scale factors because 4-bit payload values do not carry enough dynamic range by themselves for stable training behavior.
 
-In the GPU Mode competition setting [4], the kernel input contract is a tuple of tensors `(a, b, sfa, sfb, c)`:
+The kernel input contract is a tuple of tensors `(a, b, sfa, sfb, c)`:
 
 | Tensor | Shape | Layout | Dtype |
 | --- | --- | --- | --- |
@@ -299,9 +277,9 @@ In the GPU Mode competition setting [4], the kernel input contract is a tuple of
 | `sfb` | `N x (K//16) x L` | K-major | FP8 `e4m3fnuz` |
 | `c` | `M x N x L` | output tensor | FP16 |
 
-Problem-size constraints are part of the benchmark definition: `M` must be divisible by `mma_tiler_mn[0]`, `N` by `mma_tiler_mn[1]`, and `K` by `256`. The ranking metric is the geometric mean across benchmark cases.
+Problem-size constraints: `M` must be divisible by `mma_tiler_mn[0]`, `N` by `mma_tiler_mn[1]`, and `K` by `256`.
 
-The speed-of-light reference used in the competition is based on `max(FP4 Tensor Core throughput, DRAM throughput)` for B200 at `1.5 GHz`. The official benchmark shapes are:
+The speed-of-light reference is based on `max(FP4 Tensor Core throughput, DRAM throughput)` for B200 at `1.5 GHz`. The benchmark shapes are:
 
 | M | N | K | L |
 | ---: | ---: | ---: | ---: |
@@ -321,7 +299,7 @@ SFA and SFB are the per-block correction terms that undo local quantization loss
 
 This kernel uses 2-CTA mode for larger tiles. When the M tile is 256, two CTAs act as one unit in the mainloop.
 
-Each CTA, which is a thread block, carries part of the tile state and part of the outputs. In this 2-CTA path, the effective MMA_M reaches 256 while BLOCK_M per CTA stays 128. MMA_N does not change and still goes up to 256. The main change is data ownership. Each CTA only needs to hold half of the B tile, and output ownership is also split across the pair.
+Each CTA carries part of the tile state and part of the outputs. In this 2-CTA path, the effective MMA_M reaches 256 while BLOCK_M per CTA stays 128. MMA_N does not change and still goes up to 256. The main change is data ownership. Each CTA only needs to hold half of the B tile, and output ownership is also split across the pair.
 
 On Blackwell, CTA clusters let two blocks cooperate directly. In this code, 2-CTA mode means those two CTAs share control of data movement and compute progress.
 
@@ -371,7 +349,7 @@ The code hard-partitions warp roles so data movement, compute, and epilogue can 
 
 Each warp has one job. TMA Warp loads A, B, SFA, and SFB from global memory to shared memory. MMA Warp runs matrix multiply on tensor cores. Epilogue Warps convert and store results to global memory.
 
-Ampere introduced asynchronous copy primitives that decoupled movement from scalar load instructions. Hopper introduced mbarrier-based coordination and async proxy semantics that made warp-specialized pipelines robust in software. Blackwell extends this model into the Tensor Core path and CTA cluster control, which makes persistent multi-stage GEMM pipelines more practical to schedule and sustain.
+Ampere introduced `cp.async`, an asynchronous copy that moves data from global to shared memory without staging through registers. Hopper introduced mbarrier (hardware memory barrier) coordination and async proxy semantics that made warp-specialized pipelines robust in software. Blackwell extends this model into the Tensor Core path and CTA cluster control, which makes persistent multi-stage GEMM pipelines more practical to schedule and sustain.
 
 ![](figures/warp.webp)
 
@@ -392,7 +370,7 @@ Data movement is orchestrated with producer and consumer warps using acquire-rel
 
 `ab_pipeline` manages shared memory buffers with barrier synchronization. TMA signals full when done loading, and MMA signals empty when done consuming. Loads and compute overlap. `acc_pipeline` manages the accumulator in tensor memory between MMA and epilogue.
 
-In the producer phase, a dedicated warp issues TMA transfers for A and B tiles and places them into SMEM queue slots. Each slot is reused, so correctness depends on a strict full-empty protocol. The producer waits until a slot is empty, issues the copy, and then marks the slot full. This queue provides lookahead depth, which allows data movement to run ahead of compute. In the compute phase, MMA warps wait for a full SMEM slot, then consume that tile and issue tcgen05 MMA instructions. After consumption, the slot is returned to the producer by marking it empty. Accumulation is written into TMEM buffers using rotation across buffer slots. That rotation allows compute and epilogue to run concurrently on different accumulator buffers.
+In the producer phase, a dedicated warp issues TMA transfers for A and B tiles and places them into SMEM queue slots. Each slot is reused, so correctness depends on a strict full-empty protocol. The producer waits until a slot is empty, issues the copy, and then marks the slot full. This queue provides lookahead depth, which allows data movement to run ahead of compute. In the compute phase, MMA warps wait for a full SMEM slot, then consume that tile and issue tcgen05 (Blackwell's 5th-generation tensor core ISA) MMA instructions. After consumption, the slot is returned to the producer by marking it empty. Accumulation is written into TMEM buffers using rotation across buffer slots. That rotation allows compute and epilogue to run concurrently on different accumulator buffers.
 
 In the epilogue phase, epilogue warps wait until a TMEM accumulator buffer is marked full. They read accumulator fragments, apply output math, and store results to GMEM. When that buffer has been fully drained, epilogue marks it empty so the MMA phase can reuse it.
 
@@ -549,4 +527,3 @@ Epilogue releases the accumulator as soon as it is copied out so MMA can start t
 1. https://www.aleksagordic.com/blog/matmul
 2. https://gist.githubusercontent.com/Maharshi-Pandya/fa92c0b01ab684a413c73237334c9d48/raw/1a6b9710a6cca41aaff183bfca518aecc24dfdd2/quant.py
 3. https://danielvegamyhre.github.io/2026/02/02/cuda-gdb.html
-4. https://www.gpumode.com/leaderboard/597?tab=rankings
